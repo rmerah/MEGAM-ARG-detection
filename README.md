@@ -4,6 +4,14 @@
 
 Développé par **Rachid Merah** - rachid.merah77@gmail.com
 
+> **[English version (README_EN.md)](README_EN.md)**
+
+---
+
+## Video de présentation
+
+https://github.com/rmerah/MEGAM-ARG-detection/raw/main/video_remotion/out/install-guide.mp4
+
 ---
 
 ## Description
@@ -176,6 +184,7 @@ Ouvrir dans un navigateur : http://localhost:8080/form_launch_analysis.html
 |---------|----------|-------------|
 | GET | `/api/databases` | Liste des bases |
 | POST | `/api/databases/{db_key}/update` | Mettre à jour une base |
+| GET | `/api/databases/{db_key}/progress` | Progression du téléchargement |
 
 ---
 
@@ -256,4 +265,4 @@ Email : rachid.merah77@gmail.com
 
 ---
 
-*Version 3.2 - Janvier 2026*
+*Version 3.2 - Février 2026*
