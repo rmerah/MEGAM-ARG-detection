@@ -1,0 +1,79 @@
+# =============================================================================
+# MEGAM ARG Detection - Docker Compose
+# Orchestration des services backend et frontend
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Backend API FastAPI + Pipeline bioinformatique
+  # ==========================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: megam-arg-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DATABASE_PATH=/app/backend/jobs.db
+      - PIPELINE_SCRIPT=/app/pipeline/MANUAL_MEGA_MONOLITHIC_PIPELINE_v3.2_WEB.sh
+      - PIPELINE_WORK_DIR=/app/pipeline
+      - LOG_LEVEL=INFO
+    volumes:
+      # Persistance de la base de données
+      - ./data/jobs.db:/app/backend/jobs.db
+      # Bases de données ARG (montées en lecture/écriture)
+      - ./pipeline/databases:/app/pipeline/databases
+      # Données d'entrée (FASTQ, FASTA)
+      - ./pipeline/data:/app/pipeline/data
+      # Résultats des analyses
+      - ./pipeline/outputs:/app/pipeline/outputs
+      # Références pour Snippy
+      - ./pipeline/references:/app/pipeline/references
+      # Datasets ML
+      - ./pipeline/ml_datasets:/app/pipeline/ml_datasets
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - megam-network
+
+  # ==========================================================================
+  # Frontend - Interface web
+  # ==========================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: megam-arg-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    networks:
+      - megam-network
+
+# =============================================================================
+# Réseau
+# =============================================================================
+networks:
+  megam-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes nommés (optionnel, pour persistance avancée)
+# =============================================================================
+volumes:
+  databases:
+    driver: local
+  outputs:
+    driver: local

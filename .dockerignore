@@ -1,0 +1,67 @@
+# =============================================================================
+# Docker Ignore - Fichiers à exclure du build Docker
+# =============================================================================
+
+# Environnements virtuels Python
+backend/venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# IDE et éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation et fichiers de configuration Claude
+.claude/
+CLAUDE.md
+
+# Fichiers de test et développement
+*.log
+*.tmp
+test_*.py
+tests/
+
+# Résultats d'analyses antérieures (optionnel - décommenter pour exclure)
+# pipeline/outputs/
+
+# Données FASTQ volumineuses (décommenter si vous ne voulez pas les inclure)
+# pipeline/data/*.fastq
+# pipeline/data/*.fq
+# pipeline/data/*.fastq.gz
+
+# Base de données SQLite existante (sera créée au runtime)
+backend/jobs.db
+
+# Fichiers Docker eux-mêmes
+Dockerfile
+Dockerfile.frontend
+docker-compose.yml
+.dockerignore
+
+# Archives
+*.tar.gz
+*.zip
+*.tar
+pipeline/archives/
+
+# Caches et temporaires
+.cache/
+*.cache
+tmp/
+temp/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
