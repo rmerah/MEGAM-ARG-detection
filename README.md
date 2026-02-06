@@ -6,50 +6,49 @@
 
 <p align="center">
   <strong>Antimicrobial Resistance Gene Detection Pipeline</strong><br>
-  Web interface for ARG detection using AMRFinderPlus, ResFinder, CARD, Prokka, SPAdes/MEGAHIT & Kraken2
+  Web interface for ARG detection using AMRFinderPlus, ResFinder, CARD, Prokka, SPAdes/MEGAHIT &amp; Kraken2
 </p>
 
 <p align="center">
   <a href="#-installation-guide-video">Video</a> &bull;
-  <a href="#-fran%C3%A7ais">Fran&ccedil;ais</a> &bull;
+  <a href="#-français">Français</a> &bull;
   <a href="#-english">English</a>
 </p>
 
 ---
 
-## Installation Guide Video
+## 🎬 Installation Guide Video
 
-https://github.com/rmerah/MEGAM-ARG-detection/raw/main/video_remotion/out/install-guide.mp4
+<video src="https://github.com/rmerah/MEGAM-ARG-detection/raw/main/video_remotion/out/install-guide.mp4" controls muted width="100%"></video>
 
 ---
 
-<details open>
-<summary><h2>Fran&ccedil;ais</h2></summary>
+## 🇫🇷 Français
 
 ### Description
 
-MEGAM ARG Detection est une interface web moderne permettant de lancer et monitorer des analyses de d&eacute;tection de g&egrave;nes de r&eacute;sistance aux antimicrobiens. Elle s'appuie sur un pipeline bash int&eacute;grant plusieurs outils de r&eacute;f&eacute;rence :
+MEGAM ARG Detection est une interface web moderne permettant de lancer et monitorer des analyses de détection de gènes de résistance aux antimicrobiens. Elle s'appuie sur un pipeline bash intégrant plusieurs outils de référence :
 
-- **AMRFinderPlus** (NCBI) - D&eacute;tection de g&egrave;nes ARG
-- **ResFinder** (via Abricate) - Base de donn&eacute;es de r&eacute;sistance
+- **AMRFinderPlus** (NCBI) - Détection de gènes ARG
+- **ResFinder** (via Abricate) - Base de données de résistance
 - **CARD** (via Abricate) - Comprehensive Antibiotic Resistance Database
-- **Prokka** - Annotation g&eacute;nomique
+- **Prokka** - Annotation génomique
 - **SPAdes/MEGAHIT** - Assemblage de novo
 - **Kraken2** - Classification taxonomique
 
-### Fonctionnalit&eacute;s
+### Fonctionnalités
 
 - Lancement d'analyses depuis une interface web intuitive
 - Support : SRA, GenBank, Assembly NCBI, fichiers locaux
-- Dashboard monitoring temps r&eacute;el avec progression
-- Affichage des g&egrave;nes ARG par outil avec classification de priorit&eacute; (CRITICAL, HIGH, MEDIUM)
-- Graphiques, export CSV, acc&egrave;s aux fichiers g&eacute;n&eacute;r&eacute;s
-- Gestion des bases de donn&eacute;es avec barres de progression
+- Dashboard monitoring temps réel avec progression
+- Affichage des gènes ARG par outil avec classification de priorité (CRITICAL, HIGH, MEDIUM)
+- Graphiques, export CSV, accès aux fichiers générés
+- Gestion des bases de données avec barres de progression
 - Historique complet des analyses
 
 ### Installation
 
-#### Pr&eacute;requis
+#### Prérequis
 
 - Python 3.8+
 - Conda (pour les outils bioinformatiques)
@@ -64,20 +63,20 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### Bases de donn&eacute;es
+#### Bases de données
 
-| Base | Description | Taille estim&eacute;e |
+| Base | Description | Taille estimée |
 |------|-------------|----------------|
 | Kraken2 | Classification taxonomique | ~8 GB |
-| AMRFinderPlus | D&eacute;tection ARG (NCBI) | ~200 MB |
+| AMRFinderPlus | Détection ARG (NCBI) | ~200 MB |
 | CARD | Comprehensive Antibiotic Resistance Database | ~1 GB |
-| ResFinder | Base de donn&eacute;es de r&eacute;sistance | ~60 MB |
-| PointFinder | Mutations de r&eacute;sistance | ~3 MB |
+| ResFinder | Base de données de résistance | ~60 MB |
+| PointFinder | Mutations de résistance | ~3 MB |
 | MLST | Multi-Locus Sequence Typing | ~200 MB |
 
-Les bases peuvent &ecirc;tre t&eacute;l&eacute;charg&eacute;es depuis la page **Gestion des bases de donn&eacute;es** de l'interface web.
+Les bases peuvent être téléchargées depuis la page **Gestion des bases de données** de l'interface web.
 
-### D&eacute;marrage
+### Démarrage
 
 ```bash
 # 1. Backend API (port 8000)
@@ -99,7 +98,7 @@ docker compose up --build -d
 # API: http://localhost:8000/docs
 ```
 
-### Types d'entr&eacute;e support&eacute;s
+### Types d'entrée supportés
 
 | Type | Format | Exemple |
 |------|--------|---------|
@@ -110,34 +109,31 @@ docker compose up --build -d
 
 ### API Endpoints
 
-| M&eacute;thode | Endpoint | Description |
+| Méthode | Endpoint | Description |
 |---------|----------|-------------|
 | POST | `/api/launch` | Lancer une analyse |
 | GET | `/api/status/{job_id}` | Statut d'un job |
-| GET | `/api/results/{job_id}` | R&eacute;sultats d'un job |
+| GET | `/api/results/{job_id}` | Résultats d'un job |
 | GET | `/api/jobs` | Liste des jobs |
-| POST | `/api/jobs/{job_id}/stop` | Arr&ecirc;ter un job |
+| POST | `/api/jobs/{job_id}/stop` | Arrêter un job |
 | DELETE | `/api/jobs/{job_id}` | Supprimer un job |
 | GET | `/api/databases` | Liste des bases |
-| POST | `/api/databases/{db_key}/update` | Mettre &agrave; jour une base |
-| GET | `/api/databases/{db_key}/progress` | Progression du t&eacute;l&eacute;chargement |
+| POST | `/api/databases/{db_key}/update` | Mettre à jour une base |
+| GET | `/api/databases/{db_key}/progress` | Progression du téléchargement |
 
-Documentation compl&egrave;te : http://localhost:8000/docs
+Documentation complète : http://localhost:8000/docs
 
-### Classification de priorit&eacute;
+### Classification de priorité
 
-| Niveau | Types de r&eacute;sistance |
+| Niveau | Types de résistance |
 |--------|---------------------|
-| **CRITICAL** | Carbap&eacute;n&egrave;mes, Colistine, Vancomycine, MRSA, Lin&eacute;zolide |
-| **HIGH** | B&ecirc;ta-lactamines, Fluoroquinolones, Aminoglycosides, ESBL |
-| **MEDIUM** | T&eacute;tracyclines, Sulfamides, Trim&eacute;thoprime, Chloramph&eacute;nicol |
-
-</details>
+| **CRITICAL** | Carbapénèmes, Colistine, Vancomycine, MRSA, Linézolide |
+| **HIGH** | Bêta-lactamines, Fluoroquinolones, Aminoglycosides, ESBL |
+| **MEDIUM** | Tétracyclines, Sulfamides, Triméthoprime, Chloramphénicol |
 
 ---
 
-<details>
-<summary><h2>English</h2></summary>
+## 🇬🇧 English
 
 ### Description
 
@@ -244,8 +240,6 @@ Full documentation: http://localhost:8000/docs
 | **CRITICAL** | Carbapenems, Colistin, Vancomycin, MRSA, Linezolid |
 | **HIGH** | Beta-lactams, Fluoroquinolones, Aminoglycosides, ESBL |
 | **MEDIUM** | Tetracyclines, Sulfonamides, Trimethoprim, Chloramphenicol |
-
-</details>
 
 ---
 
