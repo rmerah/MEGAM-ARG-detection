@@ -1,0 +1,114 @@
+# =============================================================================
+# MEGAM ARG Detection - .gitignore pour GitHub
+# =============================================================================
+
+# ===== Environnements Python =====
+backend/venv/
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ===== Bases de données volumineuses =====
+**/databases/
+pipeline/data/*.fastq
+pipeline/data/*.fastq.gz
+pipeline/data/*.fq
+pipeline/data/*.fq.gz
+pipeline/data/*.fasta
+pipeline/data/*.fa
+pipeline/data/*.fna
+
+# ===== Résultats et outputs =====
+**/outputs/
+pipeline/archives/
+pipeline/ml_datasets/*.csv
+
+# ===== Base de données SQLite =====
+backend/jobs.db
+*.db
+
+# ===== Logs et fichiers temporaires =====
+*.log
+*.tmp
+*.temp
+logs/
+
+# ===== IDE et éditeurs =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ===== Node.js =====
+node_modules/
+.cache/
+
+# ===== Système =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Docker =====
+.docker/
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+docker/
+scripts/deploy.sh
+scripts/create_archive.sh
+
+# ===== Claude Code & AI Agents =====
+CLAUDE.md
+.claude/
+.agent/
+.agents/
+.cline/
+.codebuddy/
+.codex/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.gemini/
+.github/
+.goose/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.opencode/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.windsurf/
+.zencoder/
+skills/
+
+# ===== Projets video (sources ignorees, seul video/ est suivi) =====
+my-video/
+video_remotion/
+
+# ===== Archives =====
+*.tar.gz
+*.zip
+*.tar
+
+# ===== Fichiers de configuration locaux =====
+backend/.env
+.env.local

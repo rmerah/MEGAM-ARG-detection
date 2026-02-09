@@ -1,0 +1,222 @@
+# Guide d'installation - MEGAM ARG Detection
+
+Ce guide explique comment installer et exécuter le pipeline MEGAM ARG Detection sur un nouvel ordinateur.
+
+## Prérequis
+
+### Option 1 : Installation avec Docker (Recommandé)
+
+- **Docker** >= 20.10
+- **Docker Compose** >= 2.0
+- **Espace disque** : ~20 GB minimum
+- **RAM** : 8 GB minimum (16 GB recommandé)
+
+### Option 2 : Installation manuelle
+
+- **Python** >= 3.9
+- **Conda/Miniconda**
+- **Git**
+- Outils bioinformatiques (voir section dédiée)
+
+---
+
+## Installation avec Docker (Méthode recommandée)
+
+### Étape 1 : Extraire l'archive
+
+```bash
+tar -xzf megam_arg_detection_*.tar.gz
+cd web_interface_arg_2
+```
+
+### Étape 2 : Lancer le déploiement
+
+```bash
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+```
+
+Choisissez l'option **1** pour construire et démarrer les services.
+
+### Étape 3 : Accéder à l'application
+
+- **Interface web** : http://localhost:8080
+- **API (Swagger)** : http://localhost:8000/docs
+- **API (ReDoc)** : http://localhost:8000/redoc
+
+### Commandes Docker utiles
+
+```bash
+# Voir les logs
+docker compose logs -f
+
+# Arrêter les services
+docker compose down
+
+# Redémarrer
+docker compose up -d
+
+# Reconstruire après modifications
+docker compose up --build -d
+```
+
+---
+
+## Installation manuelle (Sans Docker)
+
+### Étape 1 : Installer les dépendances Python
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# ou: venv\Scripts\activate  # Windows
+
+pip install -r requirements.txt
+```
+
+### Étape 2 : Installer Conda et les outils bioinformatiques
+
+```bash
+# Installer Miniconda si pas déjà fait
+# https://docs.conda.io/en/latest/miniconda.html
+
+# Créer l'environnement avec tous les outils
+conda create -n megam_arg -c bioconda -c conda-forge \
+    fastqc fastp multiqc \
+    spades megahit quast \
+    prokka \
+    ncbi-amrfinderplus abricate rgi \
+    kraken2 bracken \
+    snippy mlst \
+    samtools bcftools bwa seqkit \
+    sra-tools entrez-direct
+
+conda activate megam_arg
+```
+
+### Étape 3 : Configurer les bases de données ARG
+
+Si l'archive ne contient pas les bases de données, téléchargez-les :
+
+```bash
+# AMRFinderPlus
+amrfinder_update --database pipeline/databases/amrfinder_db
+
+# Kraken2 (base standard ~8GB)
+kraken2-build --standard --db pipeline/databases/kraken2_db
+
+# CARD
+cd pipeline/databases/card_db
+wget https://card.mcmaster.ca/latest/data
+tar -xjf data ./card.json
+rgi load --card_json card.json --local
+
+# Abricate databases
+abricate --setupdb
+```
+
+### Étape 4 : Démarrer les services
+
+**Terminal 1 - Backend :**
+```bash
+cd backend
+source venv/bin/activate
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Terminal 2 - Frontend :**
+```bash
+cd maquettes
+python3 -m http.server 8080
+```
+
+---
+
+## Structure des répertoires
+
+```
+web_interface_arg_2/
+├── backend/          # API FastAPI
+├── maquettes/        # Frontend HTML/JS
+├── pipeline/         # Pipeline bioinformatique
+│   ├── data/         # Données d'entrée (FASTQ, FASTA)
+│   ├── databases/    # Bases de données ARG
+│   ├── outputs/      # Résultats des analyses
+│   └── references/   # Génomes de référence
+├── python/           # Scripts utilitaires
+├── docker/           # Configuration Docker
+└── scripts/          # Scripts de déploiement
+```
+
+---
+
+## Configuration
+
+### Variables d'environnement
+
+Créez un fichier `backend/.env` basé sur `.env.example` :
+
+```env
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Database
+DATABASE_PATH=jobs.db
+
+# Pipeline Configuration
+PIPELINE_SCRIPT=../pipeline/MANUAL_MEGA_MONOLITHIC_PIPELINE_v3.2_WEB.sh
+PIPELINE_WORK_DIR=../pipeline
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+---
+
+## Résolution de problèmes
+
+### Erreur : "Permission denied" sur les scripts
+
+```bash
+chmod +x pipeline/*.sh
+chmod +x scripts/*.sh
+```
+
+### Erreur : Base de données manquante
+
+```bash
+# Créer les répertoires
+mkdir -p pipeline/databases/{kraken2_db,card_db,amrfinder_db}
+
+# Mettre à jour les bases
+./pipeline/MANUAL_MEGA_MONOLITHIC_PIPELINE_v3.2_WEB.sh update all
+```
+
+### Docker : Pas assez de mémoire
+
+Augmentez la mémoire allouée à Docker dans les paramètres (minimum 8 GB).
+
+### Port déjà utilisé
+
+Modifiez les ports dans `docker-compose.yml` ou arrêtez le service qui utilise le port :
+
+```bash
+# Vérifier quel processus utilise le port 8000
+lsof -i :8000
+```
+
+---
+
+## Support
+
+Pour toute question ou problème :
+- Consultez la documentation dans le dossier `docs/`
+- Vérifiez les logs avec `docker compose logs`
+
+---
+
+## Licence
+
+Ce projet est destiné à un usage de recherche et éducatif.
