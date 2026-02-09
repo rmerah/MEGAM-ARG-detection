@@ -4,65 +4,16 @@ Ce guide explique comment installer et exécuter le pipeline MEGAM ARG Detection
 
 ## Prérequis
 
-### Option 1 : Installation avec Docker (Recommandé)
-
-- **Docker** >= 20.10
-- **Docker Compose** >= 2.0
-- **Espace disque** : ~20 GB minimum
-- **RAM** : 8 GB minimum (16 GB recommandé)
-
-### Option 2 : Installation manuelle
-
 - **Python** >= 3.9
 - **Conda/Miniconda**
 - **Git**
+- **Espace disque** : ~20 GB minimum
+- **RAM** : 8 GB minimum (16 GB recommandé)
 - Outils bioinformatiques (voir section dédiée)
 
 ---
 
-## Installation avec Docker (Méthode recommandée)
-
-### Étape 1 : Extraire l'archive
-
-```bash
-tar -xzf megam_arg_detection_*.tar.gz
-cd web_interface_arg_2
-```
-
-### Étape 2 : Lancer le déploiement
-
-```bash
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh
-```
-
-Choisissez l'option **1** pour construire et démarrer les services.
-
-### Étape 3 : Accéder à l'application
-
-- **Interface web** : http://localhost:8080
-- **API (Swagger)** : http://localhost:8000/docs
-- **API (ReDoc)** : http://localhost:8000/redoc
-
-### Commandes Docker utiles
-
-```bash
-# Voir les logs
-docker compose logs -f
-
-# Arrêter les services
-docker compose down
-
-# Redémarrer
-docker compose up -d
-
-# Reconstruire après modifications
-docker compose up --build -d
-```
-
----
-
-## Installation manuelle (Sans Docker)
+## Installation
 
 ### Étape 1 : Installer les dépendances Python
 
@@ -97,7 +48,7 @@ conda activate megam_arg
 
 ### Étape 3 : Configurer les bases de données ARG
 
-Si l'archive ne contient pas les bases de données, téléchargez-les :
+Les bases de données sont téléchargées automatiquement par le pipeline lors de la première exécution. Vous pouvez aussi les télécharger manuellement :
 
 ```bash
 # AMRFinderPlus
@@ -131,6 +82,12 @@ cd maquettes
 python3 -m http.server 8080
 ```
 
+### Étape 5 : Accéder à l'application
+
+- **Interface web** : http://localhost:8080
+- **API (Swagger)** : http://localhost:8000/docs
+- **API (ReDoc)** : http://localhost:8000/redoc
+
 ---
 
 ## Structure des répertoires
@@ -145,8 +102,7 @@ web_interface_arg_2/
 │   ├── outputs/      # Résultats des analyses
 │   └── references/   # Génomes de référence
 ├── python/           # Scripts utilitaires
-├── docker/           # Configuration Docker
-└── scripts/          # Scripts de déploiement
+└── video/            # Vidéo guide d'installation
 ```
 
 ---
@@ -181,7 +137,6 @@ LOG_LEVEL=INFO
 
 ```bash
 chmod +x pipeline/*.sh
-chmod +x scripts/*.sh
 ```
 
 ### Erreur : Base de données manquante
@@ -194,13 +149,9 @@ mkdir -p pipeline/databases/{kraken2_db,card_db,amrfinder_db}
 ./pipeline/MANUAL_MEGA_MONOLITHIC_PIPELINE_v3.2_WEB.sh update all
 ```
 
-### Docker : Pas assez de mémoire
-
-Augmentez la mémoire allouée à Docker dans les paramètres (minimum 8 GB).
-
 ### Port déjà utilisé
 
-Modifiez les ports dans `docker-compose.yml` ou arrêtez le service qui utilise le port :
+Arrêtez le service qui utilise le port :
 
 ```bash
 # Vérifier quel processus utilise le port 8000
@@ -213,7 +164,7 @@ lsof -i :8000
 
 Pour toute question ou problème :
 - Consultez la documentation dans le dossier `docs/`
-- Vérifiez les logs avec `docker compose logs`
+- Vérifiez les logs du backend dans la console
 
 ---
 

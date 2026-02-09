@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="https://github.com/rmerah/MEGAM-ARG-detection/releases/download/v3.2/install-guide.mp4">
-    <img src="video_remotion/out/video-thumbnail.jpg" alt="Watch the installation guide video" width="600">
+    <img src="video/video-thumbnail.jpg" alt="Watch the installation guide video" width="600">
   </a>
   <br>
   <em>Click to watch the installation guide video</em>
@@ -94,14 +94,6 @@ cd maquettes
 python3 -m http.server 8080
 
 # 3. Ouvrir http://localhost:8080/form_launch_analysis.html
-```
-
-#### Docker (alternative)
-
-```bash
-docker compose up --build -d
-# Frontend: http://localhost:8080
-# API: http://localhost:8000/docs
 ```
 
 ### Types d'entrée supportés
@@ -206,14 +198,6 @@ python3 -m http.server 8080
 # 3. Open http://localhost:8080/form_launch_analysis.html
 ```
 
-#### Docker (alternative)
-
-```bash
-docker compose up --build -d
-# Frontend: http://localhost:8080
-# API docs: http://localhost:8000/docs
-```
-
 ### Supported input types
 
 | Type | Format | Example |
@@ -275,8 +259,8 @@ MEGAM_ARG_Detection_WEB/
 │   ├── outputs/               # Analysis results
 │   └── databases/             # ARG databases
 │
-└── video_remotion/             # Installation guide video (Remotion)
-    └── out/install-guide.mp4
+└── video/                      # Installation guide video
+    └── install-guide.mp4
 ```
 
 ## Tech Stack
@@ -286,7 +270,7 @@ MEGAM_ARG_Detection_WEB/
 | **Backend** | FastAPI, SQLite (aiosqlite), Pydantic |
 | **Frontend** | HTML5, Vanilla JS, TailwindCSS (CDN), Chart.js |
 | **Pipeline** | Bash, Conda (bioinformatics tools) |
-| **Deployment** | Docker, Docker Compose, nginx |
+| **Deployment** | Uvicorn, Python HTTP server |
 
 ---
 

@@ -354,8 +354,6 @@ Optimisations, tests, déploiement.
 - [ ] FAQ troubleshooting
 
 #### 4.7 Déploiement
-- [ ] Dockerfile backend
-- [ ] docker-compose.yml (backend + nginx)
 - [ ] Configuration production :
   - Gunicorn workers
   - Nginx reverse proxy
@@ -366,7 +364,6 @@ Optimisations, tests, déploiement.
 ### Livrable Phase 4
 ✅ Application production-ready :
 - Robuste, testée, documentée
-- Déployable via Docker
 - Interface complète et polie
 
 ---
@@ -387,7 +384,7 @@ Optimisations, tests, déploiement.
 7. ✅ Upload FASTA (Phase 4.3)
 8. ✅ Export PDF/CSV (Phase 4.4)
 9. ✅ Tests automatisés (Phase 4.5)
-10. ✅ Déploiement Docker (Phase 4.7)
+10. ✅ Déploiement production (Phase 4.7)
 
 ---
 
@@ -409,8 +406,7 @@ Optimisations, tests, déploiement.
 - **Icons** : SVG inline
 
 ### Infrastructure
-- **Container** : Docker + docker-compose
-- **Reverse proxy** : Nginx
+- **Reverse proxy** : Nginx (optionnel, en production)
 - **Database** : SQLite (historique)
 - **Logs** : Rotating file handler
 
@@ -479,7 +475,7 @@ python3 -m http.server 8080
 ### Portabilité
 - Chemins absolus/relatifs selon environnement
 - Variables d'environnement pour configuration
-- Docker pour isolation
+- Environnement conda pour isolation
 
 ---
 
