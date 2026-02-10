@@ -95,10 +95,19 @@ app = FastAPI(
 )
 
 # Configuration CORS
-ALLOWED_ORIGINS = os.environ.get(
-    "CORS_ORIGINS",
-    "http://localhost:8080,http://localhost:8000"
-).split(",")
+# Détection du port backend (via --port de uvicorn ou variable PORT)
+def _detect_backend_port():
+    import sys
+    for i, arg in enumerate(sys.argv):
+        if arg == '--port' and i + 1 < len(sys.argv):
+            return int(sys.argv[i + 1])
+    return int(os.environ.get("PORT", "8000"))
+
+# Port frontend = port backend + 80 (ex: 8000→8080, 8002→8082)
+_backend_port = _detect_backend_port()
+_frontend_port = _backend_port + 80
+_default_origins = f"http://localhost:{_frontend_port},http://localhost:{_backend_port}"
+ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", _default_origins).split(",")
 
 app.add_middleware(
     CORSMiddleware,
