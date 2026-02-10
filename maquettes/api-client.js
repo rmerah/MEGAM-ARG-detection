@@ -2,8 +2,9 @@
  * API Client for ARG Pipeline Backend
  *
  * Auto-détection de l'URL de base:
- * - Mode Docker: utilise le proxy nginx (même origine)
- * - Mode développement: utilise localhost:8000
+ * - Reverse proxy (port 80/443): URL relative
+ * - Développement local: backend sur port frontend - 80
+ *   (ex: frontend 8080 → backend 8000, frontend 8082 → backend 8002)
  *
  * Functions:
  * - launchJob(sampleId, options)
@@ -13,16 +14,15 @@
  */
 
 // Auto-détection de l'URL de l'API
-// - Docker/nginx (port 80/443 ou proxy configuré) : URL relative
-// - Développement local : http://<hostname>:8000
 const API_BASE_URL = (() => {
     const port = window.location.port;
     // Si pas de port explicite (80/443), on est derrière un reverse proxy
     if (!port || port === '80' || port === '443') {
         return '';
     }
-    // Mode développement : backend sur port 8000 (même hostname)
-    return `http://${window.location.hostname}:8000`;
+    // Mode développement : backend sur port frontend - 80
+    const backendPort = parseInt(port, 10) - 80;
+    return `http://${window.location.hostname}:${backendPort}`;
 })();
 
 /**
@@ -56,7 +56,7 @@ function _showConnectionBanner() {
             Backend API non disponible sur <code style="background:#FEE2E2;padding:2px 6px;border-radius:4px">${API_BASE_URL || window.location.origin}</code>
         </span>
         <span style="color:#B91C1C;font-size:13px">
-            — Lancez le backend : <code style="background:#FEE2E2;padding:2px 6px;border-radius:4px">cd backend && source venv/bin/activate && python -m uvicorn main:app --host 0.0.0.0 --port 8000</code>
+            — Lancez le backend : <code style="background:#FEE2E2;padding:2px 6px;border-radius:4px">cd backend && source venv/bin/activate && python -m uvicorn main:app --host 0.0.0.0 --port ${new URL(API_BASE_URL || window.location.origin).port || '8000'}</code>
         </span>
         <button onclick="this.parentElement.remove();checkBackendConnection()" style="margin-left:12px;background:#EF4444;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px">Réessayer</button>
     `;
