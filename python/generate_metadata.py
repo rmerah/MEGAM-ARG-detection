@@ -33,7 +33,6 @@ def get_tool_version(tool_name, env_name=None):
         version_commands = {
             'fastqc': ['fastqc', '--version'],
             'fastp': ['fastp', '--version'],
-            'kraken2': ['kraken2', '--version'],
             'multiqc': ['multiqc', '--version'],
             'spades.py': ['spades.py', '--version'],
             'quast.py': ['quast.py', '--version'],
@@ -71,7 +70,7 @@ def get_conda_env_versions():
     versions = {}
     
     envs = {
-        'qc_arg': ['fastqc', 'fastp', 'kraken2', 'multiqc'],
+        'qc_arg': ['fastqc', 'fastp', 'multiqc'],
         'assembly_arg': ['spades.py', 'quast.py', 'seqkit'],
         'annotation_arg': ['prokka'],
         'arg_detection': ['amrfinder', 'abricate'],
@@ -108,21 +107,6 @@ def get_database_info():
             'status': 'not_installed'
         }
     
-    # Kraken2 DB
-    script_dir = Path(__file__).parent.absolute()
-    kraken_db = script_dir / "databases" / "kraken2_db" / "standard_db"
-    if kraken_db.exists():
-        db_info['kraken2'] = {
-            'path': str(kraken_db),
-            'type': 'standard_db',
-            'status': 'installed'
-        }
-    else:
-        db_info['kraken2'] = {
-            'path': None,
-            'status': 'not_installed'
-        }
-    
     return db_info
 
 def generate_metadata(results_dir, sample_id, input_type, input_arg, 
@@ -150,7 +134,6 @@ def generate_metadata(results_dir, sample_id, input_type, input_arg,
         'tools': {
             'fastqc': '0.12.1',
             'fastp': '0.23.4',
-            'kraken2': '2.1.3',
             'multiqc': '1.19',
             'spades': '3.15.5',
             'quast': '5.2.0',
@@ -202,7 +185,7 @@ def main():
     threads = int(sys.argv[5]) if len(sys.argv) > 5 else 8
     
     # Récupérer l'espèce détectée si disponible
-    detected_species = os.environ.get('KRAKEN_DETECTED_SPECIES', None)
+    detected_species = os.environ.get('NCBI_DETECTED_SPECIES', None)
     
     # Générer les métadonnées
     metadata = generate_metadata(

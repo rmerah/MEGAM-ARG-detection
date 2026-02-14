@@ -10,7 +10,7 @@
 Créer un backend fonctionnel capable de lancer le pipeline et récupérer les résultats.
 
 ### Phase 2 : Frontend connecté
-Connecter les maquettes HTML existantes au backend via API REST.
+Connecter les frontend HTML existantes au backend via API REST.
 
 ### Phase 3 : Monitoring temps réel
 Implémenter WebSocket pour logs et progression en direct.
@@ -113,7 +113,7 @@ Optimisations, tests, déploiement.
   - Export global `window.PipelineAPI`
 
 #### 2.2 Connexion formulaire lancement
-- [ ] Copier `maquettes/form_launch_analysis.html` → `frontend/launch.html`
+- [ ] Copier `frontend/form_launch_analysis.html` → `frontend/launch.html`
 - [ ] Ajouter import `<script src="assets/js/api-client.js"></script>`
 - [ ] Modifier fonction `launchAnalysis()` :
   ```javascript
@@ -134,7 +134,7 @@ Optimisations, tests, déploiement.
 - [ ] Tester lancement réel
 
 #### 2.3 Connexion page résultats
-- [ ] Copier `maquettes/page_results_arg.html` → `frontend/results.html`
+- [ ] Copier `frontend/page_results_arg.html` → `frontend/results.html`
 - [ ] Ajouter import API client
 - [ ] Remplacer données mock par vraies données :
   ```javascript
@@ -241,7 +241,7 @@ Optimisations, tests, déploiement.
   ```
 
 #### 3.3 Dashboard monitoring connecté
-- [ ] Copier `maquettes/dashboard_monitoring.html` → `frontend/dashboard.html`
+- [ ] Copier `frontend/dashboard_monitoring.html` → `frontend/dashboard.html`
 - [ ] Ajouter imports :
   ```html
   <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>

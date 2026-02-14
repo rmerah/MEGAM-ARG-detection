@@ -86,7 +86,7 @@ if conda activate arg_detection 2>/dev/null || conda activate megam_arg 2>/dev/n
 
 ### 1. **Vérification automatique des bases abricate**
 
-**Problème identifié**: Le pipeline ne vérifiait que 5 bases de données (Kraken2, AMRFinder, CARD/RGI, PointFinder, MLST) mais **ignorait complètement** les bases abricate essentielles :
+**Problème identifié**: Le pipeline ne vérifiait que 4 bases de données (AMRFinder, CARD/RGI, PointFinder, MLST) mais **ignorait complètement** les bases abricate essentielles :
 - ResFinder
 - PlasmidFinder  
 - NCBI
@@ -223,8 +223,7 @@ Antimicrobial Resistance Genes Detection & Analysis
 
 | # | Base de données | Outil utilisateur | Fonction de détection | Téléchargement |
 |---|----------------|-------------------|----------------------|----------------|
-| 1 | Kraken2 | Classification taxonomique | `find_kraken2_db()` | `download_kraken2_db()` |
-| 2 | AMRFinder | Détection ARG (NCBI) | `find_amrfinder_db()` | `download_amrfinder_db()` |
+| 1 | AMRFinder | Détection ARG (NCBI) | `find_amrfinder_db()` | `download_amrfinder_db()` |
 | 3 | CARD/RGI | Base CARD pour RGI | `find_card_db()` | `download_card_db()` (3 méthodes) |
 | 4 | PointFinder | Détection mutations SNP | `find_pointfinder_db()` | `download_pointfinder_db()` |
 | 5 | MLST | Multi-Locus Sequence Typing | `find_mlst_db()` | `download_mlst_db()` |
@@ -254,7 +253,6 @@ Antimicrobial Resistance Genes Detection & Analysis
 - ✅ AMRFinder: 13 gènes ARG détectés
 - ✅ ResFinder: 12 gènes ARG détectés
 - ✅ PlasmidFinder: 6 plasmides détectés
-- ✅ Kraken2: *Acinetobacter baumannii* détecté (83.10%)
 - ✅ KMA: 14 gènes ARG détectés sur reads
 - ✅ Snippy: 50,015 variants identifiés
 - ⚠️ RGI/CARD: Non exécuté (card.json manquant - comportement attendu)
@@ -358,7 +356,7 @@ Pour plus d'informations :
 3. **Mode --dry-run** : Simuler l'exécution sans télécharger les données
 4. **Rapport HTML** : Créer les scripts Python manquants pour les rapports
 5. **Cache des résultats** : Éviter de réexécuter les étapes déjà complétées
-6. **Support Docker** : Containeriser le pipeline pour faciliter le déploiement
+6. **Script setup.sh** : Améliorer la détection d'erreurs lors de l'installation
 
 ---
 

@@ -49,7 +49,7 @@
 #
 #   MODULES:
 #     0. Téléchargement/Préparation des données
-#     1. Contrôle qualité (FastQC, fastp, Kraken2, MultiQC)
+#     1. Contrôle qualité (FastQC, fastp, MultiQC)
 #     2. Assemblage (SPAdes, QUAST)
 #     3. Annotation (Prokka)
 #     4. Détection ARG (AMRFinderPlus, ResFinder, CARD, etc.)
@@ -100,7 +100,6 @@ show_help() {
     echo ""
     echo "COMMANDES:"
     echo "  update               Mettre à jour toutes les bases de données"
-    echo "  update kraken        Mettre à jour uniquement Kraken2"
     echo "  update amrfinder     Mettre à jour uniquement AMRFinder"
     echo "  update card          Mettre à jour uniquement CARD (RGI)"
     echo "  update mlst          Mettre à jour uniquement MLST"
@@ -115,7 +114,7 @@ show_help() {
     echo ""
     echo "OPTIONS PROKKA (annotation):"
     echo "  --prokka-mode MODE   Mode d'annotation Prokka:"
-    echo "                         auto    → Détecte l'espèce via Kraken2 (défaut)"
+    echo "                         auto    → Détecte l'espèce via l'API NCBI (défaut)"
     echo "                         generic → Mode universel (toutes bactéries)"
     echo "                         ecoli   → Escherichia coli K-12 (legacy)"
     echo "                         custom  → Utilise --prokka-genus/species"
@@ -140,7 +139,7 @@ WORK_DIR="${WORK_DIR:-$SCRIPT_DIR}"
 # Répertoire contenant les scripts Python
 PYTHON_DIR="$(dirname "$SCRIPT_DIR")/python"
 FORCE_MODE=true  # Default true for web interface
-# Mode Prokka : "auto" (détection Kraken2), "generic" (universel), "ecoli" (E. coli par défaut)
+# Mode Prokka : "auto" (détection NCBI), "generic" (universel), "ecoli" (E. coli par défaut)
 PROKKA_MODE="${PROKKA_MODE:-auto}"
 # Variables pour Prokka (peuvent être définies par l'utilisateur)
 PROKKA_GENUS=""
@@ -234,7 +233,7 @@ elif [[ -z "$INPUT_ARG" ]]; then
     echo "═══════════════════════════════════════════════════════════════════"
     echo ""
     echo "Choisissez le mode d'annotation pour Prokka:"
-    echo "  1) auto    → Détection automatique de l'espèce via Kraken2 (recommandé)"
+    echo "  1) auto    → Détection automatique de l'espèce via l'API NCBI (recommandé)"
     echo "  2) generic → Mode universel (toutes bactéries, sans spécifier l'espèce)"
     echo "  3) ecoli   → Escherichia coli K-12 (mode legacy)"
     echo "  4) custom  → Spécifier manuellement le genre et l'espèce"
@@ -244,7 +243,7 @@ elif [[ -z "$INPUT_ARG" ]]; then
     case "${prokka_choice:-1}" in
         1)
             PROKKA_MODE="auto"
-            echo "✅ Mode Prokka: auto (détection Kraken2)"
+            echo "✅ Mode Prokka: auto (détection NCBI)"
             ;;
         2)
             PROKKA_MODE="generic"
@@ -406,7 +405,6 @@ ARCHIVE_DIR="$WORK_DIR/archives"
 LOG_DIR="$RESULTS_DIR/logs"
 
 # Bases de données (seront configurées par interactive_database_setup)
-KRAKEN_DB=""
 AMRFINDER_DB=""
 CARD_DB=""
 POINTFINDER_DB=""
@@ -423,7 +421,7 @@ if [[ "$INPUT_TYPE" == "genbank" ]] || [[ "$INPUT_TYPE" == "assembly" ]] || [[ "
     IS_ASSEMBLED_INPUT=true
 fi
 
-# Variable pour l'espèce détectée par Kraken2 (initialisée vide)
+# Variable pour l'espèce détectée par NCBI API (initialisée vide)
 DETECTED_SPECIES=""
 
 #===============================================================================
@@ -453,7 +451,6 @@ setup_directory_structure() {
         "$WORK_DIR"
         "$DATA_DIR"
         "$DB_DIR"
-        "$DB_DIR/kraken2_db"
         "$REFERENCE_DIR"
         "$ARCHIVE_DIR"
         "$RESULTS_DIR"
@@ -461,7 +458,6 @@ setup_directory_structure() {
         "$RESULTS_DIR/01_qc/fastqc_raw"
         "$RESULTS_DIR/01_qc/fastqc_clean"
         "$RESULTS_DIR/01_qc/fastp"
-        "$RESULTS_DIR/01_qc/kraken2"
         "$RESULTS_DIR/01_qc/multiqc"
         "$RESULTS_DIR/02_assembly/spades"
         "$RESULTS_DIR/02_assembly/filtered"
@@ -581,64 +577,82 @@ open_file_safe() {
     fi
 }
 
-# Fonction pour extraire l'espèce depuis un rapport Kraken2
-# Met à jour les variables globales DETECTED_SPECIES, PROKKA_GENUS, PROKKA_SPECIES
-extract_species_from_kraken2() {
-    local kraken_report="$1"
+fetch_species_from_ncbi() {
+    local sample_id="$1"
+    local input_type="$2"
 
-    if [[ ! -f "$kraken_report" ]]; then
-        log_warn "Rapport Kraken2 non trouvé: $kraken_report"
+    log_info "Interrogation de l'API NCBI pour identifier l'organisme..."
+
+    # Fichiers locaux : pas d'appel NCBI possible
+    if [[ "$input_type" == "local" ]] || [[ "$input_type" == "local_fasta" ]]; then
+        log_warn "Entrée locale: impossible de déterminer l'espèce via NCBI"
+        DETECTED_SPECIES=""
+        PROKKA_GENUS=""
+        PROKKA_SPECIES=""
         return 1
     fi
 
-    log_info "Extraction de l'espèce depuis le rapport Kraken2..."
+    local entrez_base="https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    local organism=""
+    local taxid=""
 
-    # Chercher la première ligne avec un pourcentage significatif (>1%) pour une espèce (S)
-    local top_species_line=$(grep -E "^\s*[0-9]" "$kraken_report" 2>/dev/null | \
-        awk -F'\t' '$4 == "S" && $1 > 1.0 {print; exit}' 2>/dev/null || true)
+    case "$input_type" in
+        sra)
+            # SRA (SRR/ERR/DRR) : esearch -> esummary
+            local search_result=$(curl -s "${entrez_base}/esearch.fcgi?db=sra&term=${sample_id}&retmode=json" 2>/dev/null)
+            local uid=$(echo "$search_result" | grep -o '"IdList":\["[0-9]*"' | grep -o '[0-9]*' | head -1)
+            if [[ -n "$uid" ]]; then
+                local summary=$(curl -s "${entrez_base}/esummary.fcgi?db=sra&id=${uid}&retmode=json" 2>/dev/null)
+                organism=$(echo "$summary" | grep -o 'ScientificName="[^"]*"' | head -1 | sed 's/ScientificName="//;s/"//')
+                taxid=$(echo "$summary" | grep -o 'taxid="[0-9]*"' | head -1 | sed 's/taxid="//;s/"//')
+            fi
+            ;;
+        genbank)
+            # GenBank (CP/NC_/NZ_) : esummary
+            local summary=$(curl -s "${entrez_base}/esummary.fcgi?db=nuccore&id=${sample_id}&retmode=json" 2>/dev/null)
+            local uid=$(echo "$summary" | grep -o '"uids":\["[0-9]*"' | grep -o '[0-9]*' | head -1)
+            if [[ -n "$uid" ]]; then
+                organism=$(echo "$summary" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+doc = data.get('result', {}).get('$uid', {})
+print(doc.get('organism', ''))
+" 2>/dev/null || echo "")
+            fi
+            ;;
+        assembly)
+            # Assembly (GCF_/GCA_) : esearch -> esummary
+            local search_result=$(curl -s "${entrez_base}/esearch.fcgi?db=assembly&term=${sample_id}&retmode=json" 2>/dev/null)
+            local uid=$(echo "$search_result" | grep -o '"IdList":\["[0-9]*"' | grep -o '[0-9]*' | head -1)
+            if [[ -n "$uid" ]]; then
+                local summary=$(curl -s "${entrez_base}/esummary.fcgi?db=assembly&id=${uid}&retmode=json" 2>/dev/null)
+                organism=$(echo "$summary" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+doc = data.get('result', {}).get('$uid', {})
+print(doc.get('organism', '').split('(')[0].strip())
+" 2>/dev/null || echo "")
+            fi
+            ;;
+    esac
 
-    if [[ -z "$top_species_line" ]]; then
-        # Fallback: prendre la première espèce trouvée
-        top_species_line=$(grep -E "^\s*[0-9]" "$kraken_report" 2>/dev/null | \
-            awk -F'\t' '$4 == "S" {print; exit}' 2>/dev/null || true)
+    if [[ -n "$organism" ]]; then
+        DETECTED_SPECIES="$organism"
+        PROKKA_GENUS=$(echo "$organism" | awk '{print $1}')
+        PROKKA_SPECIES=$(echo "$organism" | awk '{print $2}')
+        PROKKA_GENUS="${PROKKA_GENUS:-Bacteria}"
+        PROKKA_SPECIES="${PROKKA_SPECIES:-sp.}"
+
+        # Exporter pour les scripts Python
+        export NCBI_DETECTED_SPECIES="$DETECTED_SPECIES"
+
+        log_success "Espèce détectée via NCBI: $DETECTED_SPECIES"
+        log_info "  → Genre: $PROKKA_GENUS"
+        log_info "  → Espèce: $PROKKA_SPECIES"
+        return 0
     fi
 
-    if [[ -n "$top_species_line" ]]; then
-        # Extraire le nom scientifique (dernière colonne, peut contenir des espaces)
-        DETECTED_SPECIES=$(echo "$top_species_line" | awk -F'\t' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}' 2>/dev/null || echo "")
-
-        if [[ -n "$DETECTED_SPECIES" ]]; then
-            # Extraire genre et espèce
-            PROKKA_GENUS=$(echo "$DETECTED_SPECIES" | awk '{print $1}')
-            PROKKA_SPECIES=$(echo "$DETECTED_SPECIES" | awk '{print $2}')
-
-            # Nettoyer les valeurs
-            PROKKA_GENUS="${PROKKA_GENUS:-Bacteria}"
-            PROKKA_SPECIES="${PROKKA_SPECIES:-sp.}"
-
-            log_success "Espèce détectée par Kraken2: $DETECTED_SPECIES"
-            log_info "  → Genre: $PROKKA_GENUS"
-            log_info "  → Espèce: $PROKKA_SPECIES"
-            return 0
-        fi
-    fi
-
-    # Si aucune espèce trouvée, essayer avec le genre (G)
-    local top_genus_line=$(grep -E "^\s*[0-9]" "$kraken_report" 2>/dev/null | \
-        awk -F'\t' '$4 == "G" && $1 > 1.0 {print; exit}' 2>/dev/null || true)
-
-    if [[ -n "$top_genus_line" ]]; then
-        PROKKA_GENUS=$(echo "$top_genus_line" | awk -F'\t' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}' 2>/dev/null || echo "")
-        PROKKA_SPECIES="sp."
-        DETECTED_SPECIES="$PROKKA_GENUS sp."
-
-        if [[ -n "$PROKKA_GENUS" ]]; then
-            log_success "Genre détecté par Kraken2: $PROKKA_GENUS"
-            return 0
-        fi
-    fi
-
-    log_warn "Aucune espèce/genre détecté dans le rapport Kraken2"
+    log_warn "Impossible de déterminer l'espèce via NCBI pour $sample_id"
     DETECTED_SPECIES=""
     PROKKA_GENUS=""
     PROKKA_SPECIES=""
@@ -859,21 +873,17 @@ setup_kma_database() {
     log_info "Création de la base de données KMA..."
     mkdir -p "$kma_db_dir"
 
-    # Récupérer le chemin des bases abricate (plusieurs méthodes)
+    # Récupérer le chemin des bases abricate (abricate est dans abricate_env)
     local abricate_db=""
 
-    # Méthode 1: Extraire depuis --help (valeur par défaut entre crochets)
-    abricate_db=$(abricate --help 2>&1 | grep -oP '\-\-datadir.*\[\K[^\]]+' | head -1)
+    # Méthode 1: Extraire depuis --help via abricate_env
+    abricate_db=$(conda run -n abricate_env abricate --help 2>&1 | grep -oP '\-\-datadir.*\[\K[^\]]+' | head -1)
 
-    # Méthode 2: Si échec, chercher relativement à l'exécutable abricate
+    # Méthode 2: Si échec, chercher dans le prefix de abricate_env
     if [[ -z "$abricate_db" ]] || [[ ! -d "$abricate_db" ]]; then
-        local abricate_bin=$(which abricate 2>/dev/null)
-        if [[ -n "$abricate_bin" ]]; then
-            abricate_db="$(dirname "$abricate_bin")/../db"
-            # Normaliser le chemin
-            if [[ -d "$abricate_db" ]]; then
-                abricate_db=$(cd "$abricate_db" && pwd)
-            fi
+        local abricate_prefix=$(conda run -n abricate_env bash -c 'echo $CONDA_PREFIX' 2>/dev/null)
+        if [[ -n "$abricate_prefix" ]] && [[ -d "$abricate_prefix/share/abricate/db" ]]; then
+            abricate_db="$abricate_prefix/share/abricate/db"
         fi
     fi
 
@@ -1079,7 +1089,7 @@ setup_local_fasta() {
 }
 
 #===============================================================================
-# SECTION 6.8 : GESTION DES BASES DE DONNÉES (KRAKEN2, AMRFINDER)
+# SECTION 6.8 : GESTION DES BASES DE DONNÉES (AMRFINDER, CARD, etc.)
 #===============================================================================
 
 # Emplacements possibles pour les bases de données (ordre de priorité)
@@ -1089,44 +1099,13 @@ setup_local_fasta() {
 
 DB_SHARED_DIR="$HOME/.local/share/pipeline_arg_databases"
 
-# Fonction pour trouver la base Kraken2
-find_kraken2_db() {
-    local found_path=""
-
-    # 1. Variable d'environnement
-    if [[ -n "${KRAKEN2_DB_PATH:-}" ]] && [[ -d "$KRAKEN2_DB_PATH" ]]; then
-        if [[ -f "$KRAKEN2_DB_PATH/hash.k2d" ]]; then
-            found_path="$KRAKEN2_DB_PATH"
-        fi
-    fi
-
-    # 2. Dans l'architecture du pipeline
-    if [[ -z "$found_path" ]] && [[ -d "$DB_DIR/kraken2_db" ]]; then
-        # Chercher une DB valide (contient hash.k2d)
-        local db_candidate=$(find "$DB_DIR/kraken2_db" -name "hash.k2d" -type f 2>/dev/null | head -1)
-        if [[ -n "$db_candidate" ]]; then
-            found_path=$(dirname "$db_candidate")
-        fi
-    fi
-
-    # 3. Dans HOME partagé
-    if [[ -z "$found_path" ]] && [[ -d "$DB_SHARED_DIR/kraken2_db" ]]; then
-        local db_candidate=$(find "$DB_SHARED_DIR/kraken2_db" -name "hash.k2d" -type f 2>/dev/null | head -1)
-        if [[ -n "$db_candidate" ]]; then
-            found_path=$(dirname "$db_candidate")
-        fi
-    fi
-
-    echo "$found_path"
-}
-
 # Fonction pour trouver la base AMRFinder
 find_amrfinder_db() {
     local found_path=""
 
     # 1. Variable d'environnement
     if [[ -n "${AMRFINDER_DB_PATH:-}" ]] && [[ -d "$AMRFINDER_DB_PATH" ]]; then
-        if [[ -f "$AMRFINDER_DB_PATH/AMRProt" ]] || [[ -f "$AMRFINDER_DB_PATH/AMR.LIB" ]]; then
+        if [[ -f "$AMRFINDER_DB_PATH/AMRProt" ]] || [[ -f "$AMRFINDER_DB_PATH/AMRProt.fa" ]] || [[ -f "$AMRFINDER_DB_PATH/AMR.LIB" ]]; then
             found_path="$AMRFINDER_DB_PATH"
         fi
     fi
@@ -1139,71 +1118,23 @@ find_amrfinder_db() {
         fi
     fi
 
-    # 3. Dans l'architecture du pipeline
+    # 3. Dans l'architecture du pipeline (fichiers au niveau racine ou dans latest/)
     if [[ -z "$found_path" ]] && [[ -d "$DB_DIR/amrfinder_db" ]]; then
-        if [[ -f "$DB_DIR/amrfinder_db/AMRProt" ]] || [[ -f "$DB_DIR/amrfinder_db/AMR.LIB" ]]; then
+        if [[ -f "$DB_DIR/amrfinder_db/AMRProt" ]] || [[ -f "$DB_DIR/amrfinder_db/AMRProt.fa" ]] || [[ -f "$DB_DIR/amrfinder_db/AMR.LIB" ]]; then
             found_path="$DB_DIR/amrfinder_db"
+        elif [[ -f "$DB_DIR/amrfinder_db/latest/AMRProt" ]] || [[ -f "$DB_DIR/amrfinder_db/latest/AMRProt.fa" ]] || [[ -f "$DB_DIR/amrfinder_db/latest/AMR.LIB" ]]; then
+            found_path="$DB_DIR/amrfinder_db/latest"
         fi
     fi
 
     # 4. Dans HOME partagé
     if [[ -z "$found_path" ]] && [[ -d "$DB_SHARED_DIR/amrfinder_db" ]]; then
-        if [[ -f "$DB_SHARED_DIR/amrfinder_db/AMRProt" ]] || [[ -f "$DB_SHARED_DIR/amrfinder_db/AMR.LIB" ]]; then
+        if [[ -f "$DB_SHARED_DIR/amrfinder_db/AMRProt" ]] || [[ -f "$DB_SHARED_DIR/amrfinder_db/AMRProt.fa" ]] || [[ -f "$DB_SHARED_DIR/amrfinder_db/AMR.LIB" ]]; then
             found_path="$DB_SHARED_DIR/amrfinder_db"
         fi
     fi
 
     echo "$found_path"
-}
-
-# Fonction pour télécharger Kraken2 DB
-download_kraken2_db() {
-    local target_dir="$1"
-    local db_type="${2:-standard}"  # standard, minikraken, viral, etc.
-
-    mkdir -p "$target_dir"
-
-    echo ""
-    echo "Téléchargement de la base Kraken2 ($db_type)..."
-    echo "Cela peut prendre un certain temps selon votre connexion."
-    echo ""
-
-    case "$db_type" in
-        standard)
-            # Standard DB (~50-70 GB) - Complète
-            echo "⚠️  La base standard fait ~50-70 GB. Téléchargement en cours..."
-            local db_url="https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20231009.tar.gz"
-            wget -c -O "$target_dir/kraken2_db.tar.gz" "$db_url" 2>&1
-            ;;
-        minikraken)
-            # MiniKraken (~8 GB) - Plus légère, moins précise
-            echo "Téléchargement de MiniKraken2 (~8 GB)..."
-            local db_url="https://genome-idx.s3.amazonaws.com/kraken/k2_minusb_20231009.tar.gz"
-            wget -c -O "$target_dir/kraken2_db.tar.gz" "$db_url" 2>&1
-            ;;
-        viral)
-            # Viral DB (~500 MB) - Virus uniquement
-            echo "Téléchargement de la base virale (~500 MB)..."
-            local db_url="https://genome-idx.s3.amazonaws.com/kraken/k2_viral_20231009.tar.gz"
-            wget -c -O "$target_dir/kraken2_db.tar.gz" "$db_url" 2>&1
-            ;;
-        *)
-            echo "Type de base inconnu: $db_type"
-            return 1
-            ;;
-    esac
-
-    if [[ -f "$target_dir/kraken2_db.tar.gz" ]]; then
-        echo ""
-        echo "Extraction de la base de données..."
-        tar -xzf "$target_dir/kraken2_db.tar.gz" -C "$target_dir"
-        rm -f "$target_dir/kraken2_db.tar.gz"
-        echo "✅ Base Kraken2 installée dans: $target_dir"
-        return 0
-    else
-        echo "❌ Échec du téléchargement"
-        return 1
-    fi
 }
 
 # Fonction pour télécharger/mettre à jour AMRFinder DB
@@ -1567,7 +1498,7 @@ find_abricate_dbs() {
     local abricate_env=""
 
     # Essayer de trouver abricate dans les environnements conda
-    for env in arg_detection megam_arg annotation_arg; do
+    for env in abricate_env arg_detection megam_arg annotation_arg; do
         if conda activate $env 2>/dev/null; then
             if command -v abricate &> /dev/null; then
                 abricate_found=true
@@ -1626,7 +1557,7 @@ setup_abricate_dbs() {
     local abricate_found=false
 
     echo "  Recherche d'abricate dans les environnements conda..."
-    for env in arg_detection megam_arg annotation_arg; do
+    for env in abricate_env arg_detection megam_arg annotation_arg; do
         if conda activate $env 2>/dev/null; then
             if command -v abricate &> /dev/null; then
                 abricate_env=$env
@@ -1715,31 +1646,6 @@ setup_abricate_dbs() {
 #===============================================================================
 # FONCTIONS DE MISE À JOUR DES BASES DE DONNÉES
 #===============================================================================
-
-# Mise à jour de la base Kraken2
-update_kraken_db() {
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo "MISE À JOUR DE LA BASE KRAKEN2"
-    echo "═══════════════════════════════════════════════════════════════════"
-
-    local kraken_path=$(find_kraken2_db)
-    if [[ -z "$kraken_path" ]]; then
-        kraken_path="$DB_DIR/kraken2_db"
-    fi
-
-    echo "Chemin: $kraken_path"
-    echo ""
-    echo "⚠️  Note: Kraken2 nécessite un re-téléchargement complet (~8 Go)"
-    read -p "Continuer? (o/n): " confirm
-    if [[ "$confirm" =~ ^[oOyY]$ ]]; then
-        rm -rf "$kraken_path"/*
-        download_kraken2_db "$kraken_path" "minikraken"
-        echo "✅ Base Kraken2 mise à jour"
-    else
-        echo "Mise à jour annulée"
-    fi
-}
 
 # Mise à jour de la base AMRFinder
 update_amrfinder_db() {
@@ -1918,7 +1824,6 @@ update_all_databases() {
     echo "  3. MLST"
     echo "  4. PointFinder"
     echo "  5. KMA/ResFinder"
-    echo "  6. Kraken2 (optionnel - très volumineux)"
     echo ""
     read -p "Continuer avec la mise à jour? (o/n): " confirm
 
@@ -1935,12 +1840,6 @@ update_all_databases() {
     update_kma_db
 
     echo ""
-    read -p "Mettre à jour aussi Kraken2 (~8 Go)? (o/n): " kraken_confirm
-    if [[ "$kraken_confirm" =~ ^[oOyY]$ ]]; then
-        update_kraken_db
-    fi
-
-    echo ""
     echo "═══════════════════════════════════════════════════════════════════"
     echo "✅ MISE À JOUR TERMINÉE"
     echo "═══════════════════════════════════════════════════════════════════"
@@ -1953,10 +1852,6 @@ if [[ "$UPDATE_MODE" == true ]]; then
     UPDATE_TARGET="${INPUT_ARG2:-all}"
 
     case "$UPDATE_TARGET" in
-        kraken|kraken2)
-            update_kraken_db
-            exit 0
-            ;;
         amrfinder|amr)
             update_amrfinder_db
             exit 0
@@ -1985,7 +1880,7 @@ if [[ "$UPDATE_MODE" == true ]]; then
             echo "❌ Base inconnue: $UPDATE_TARGET"
             echo ""
             echo "Bases disponibles:"
-            echo "  kraken, amrfinder, card, mlst, pointfinder, kma"
+            echo "  amrfinder, card, mlst, pointfinder, kma"
             echo ""
             echo "Exemple: $0 update card"
             exit 1
@@ -1995,7 +1890,6 @@ fi
 
 # Menu interactif pour la gestion des bases de données
 interactive_database_setup() {
-    local kraken_found=$(find_kraken2_db)
     local amrfinder_found=$(find_amrfinder_db)
     local card_found=$(find_card_db)
     local pointfinder_found=$(find_pointfinder_db)
@@ -2008,15 +1902,6 @@ interactive_database_setup() {
     echo "VÉRIFICATION DES BASES DE DONNÉES"
     echo "═══════════════════════════════════════════════════════════════════"
     echo ""
-
-    # Vérifier Kraken2
-    if [[ -n "$kraken_found" ]]; then
-        echo "✅ Base Kraken2 trouvée: $kraken_found"
-        KRAKEN_DB="$kraken_found"
-    else
-        echo "⚠️  Base Kraken2 NON TROUVÉE"
-        need_setup=true
-    fi
 
     # Vérifier AMRFinder
     if [[ -n "$amrfinder_found" ]]; then
@@ -2071,43 +1956,36 @@ interactive_database_setup() {
             echo "Mode --force: Téléchargement automatique des bases manquantes..."
             echo ""
 
-            if [[ -z "$kraken_found" ]]; then
-                echo "Installation de Kraken2 dans l'architecture du pipeline..."
-                mkdir -p "$DB_DIR/kraken2_db"
-                download_kraken2_db "$DB_DIR/kraken2_db" "minikraken"
-                KRAKEN_DB="$DB_DIR/kraken2_db"
-            fi
-
             if [[ -z "$amrfinder_found" ]]; then
                 echo "Installation d'AMRFinder dans l'architecture du pipeline..."
                 mkdir -p "$DB_DIR/amrfinder_db"
-                download_amrfinder_db "$DB_DIR/amrfinder_db"
+                download_amrfinder_db "$DB_DIR/amrfinder_db" || echo "⚠️  AMRFinder non installée - le pipeline continuera sans"
                 AMRFINDER_DB="$DB_DIR/amrfinder_db"
             fi
 
             if [[ -z "$card_found" ]]; then
                 echo "Installation de CARD (RGI) dans l'architecture du pipeline..."
                 mkdir -p "$DB_DIR/card_db"
-                download_card_db "$DB_DIR/card_db"
+                download_card_db "$DB_DIR/card_db" || echo "⚠️  CARD non installée - le pipeline continuera sans"
                 CARD_DB="$DB_DIR/card_db"
             fi
 
             if [[ -z "$pointfinder_found" ]]; then
                 echo "Installation de PointFinder dans l'architecture du pipeline..."
-                download_pointfinder_db "$DB_DIR"
+                download_pointfinder_db "$DB_DIR" || echo "⚠️  PointFinder non installée - le pipeline continuera sans"
                 POINTFINDER_DB="$DB_DIR/pointfinder_db"
             fi
 
             if [[ -z "$mlst_found" ]]; then
                 echo "Installation de MLST dans l'architecture du pipeline..."
                 mkdir -p "$DB_DIR/mlst_db"
-                download_mlst_db "$DB_DIR/mlst_db"
+                download_mlst_db "$DB_DIR/mlst_db" || echo "⚠️  MLST non installée - le pipeline continuera sans"
                 MLST_DB="$DB_DIR/mlst_db"
             fi
 
             if [[ -z "$abricate_found" ]]; then
                 echo "Installation des bases abricate..."
-                setup_abricate_dbs
+                setup_abricate_dbs || echo "⚠️  Bases abricate non installées - le pipeline continuera sans"
             fi
         fi
         return 0
@@ -2141,24 +2019,6 @@ interactive_database_setup() {
         case $db_choice in
             1)
                 # Télécharger dans le pipeline (PORTABLE)
-                if [[ -z "$kraken_found" ]]; then
-                    echo ""
-                    echo "Quelle version de Kraken2 voulez-vous ?"
-                    echo "  a) Standard (~50 GB) - Complète et précise"
-                    echo "  b) MiniKraken (~8 GB) - Légère, recommandée pour débuter"
-                    echo "  c) Virale (~500 MB) - Virus uniquement"
-                    read -p "Votre choix (a/b/c): " kraken_choice
-
-                    mkdir -p "$DB_DIR/kraken2_db"
-                    case $kraken_choice in
-                        a) download_kraken2_db "$DB_DIR/kraken2_db" "standard" ;;
-                        b) download_kraken2_db "$DB_DIR/kraken2_db" "minikraken" ;;
-                        c) download_kraken2_db "$DB_DIR/kraken2_db" "viral" ;;
-                        *) download_kraken2_db "$DB_DIR/kraken2_db" "minikraken" ;;
-                    esac
-                    KRAKEN_DB=$(find_kraken2_db)
-                fi
-
                 if [[ -z "$amrfinder_found" ]]; then
                     echo ""
                     echo "Installation d'AMRFinder dans le pipeline..."
@@ -2200,24 +2060,6 @@ interactive_database_setup() {
                 # Télécharger dans HOME partagé
                 mkdir -p "$DB_SHARED_DIR"
 
-                if [[ -z "$kraken_found" ]]; then
-                    echo ""
-                    echo "Quelle version de Kraken2 voulez-vous ?"
-                    echo "  a) Standard (~50 GB)"
-                    echo "  b) MiniKraken (~8 GB) - Recommandée"
-                    echo "  c) Virale (~500 MB)"
-                    read -p "Votre choix (a/b/c): " kraken_choice
-
-                    mkdir -p "$DB_SHARED_DIR/kraken2_db"
-                    case $kraken_choice in
-                        a) download_kraken2_db "$DB_SHARED_DIR/kraken2_db" "standard" ;;
-                        b) download_kraken2_db "$DB_SHARED_DIR/kraken2_db" "minikraken" ;;
-                        c) download_kraken2_db "$DB_SHARED_DIR/kraken2_db" "viral" ;;
-                        *) download_kraken2_db "$DB_SHARED_DIR/kraken2_db" "minikraken" ;;
-                    esac
-                    KRAKEN_DB=$(find_kraken2_db)
-                fi
-
                 if [[ -z "$amrfinder_found" ]]; then
                     echo ""
                     echo "Installation d'AMRFinder dans HOME partagé..."
@@ -2257,17 +2099,6 @@ interactive_database_setup() {
                 ;;
             3)
                 # Chemins personnalisés
-                if [[ -z "$kraken_found" ]]; then
-                    echo ""
-                    read -p "Chemin vers la base Kraken2: " custom_kraken
-                    if [[ -d "$custom_kraken" ]] && [[ -f "$custom_kraken/hash.k2d" ]]; then
-                        KRAKEN_DB="$custom_kraken"
-                        echo "✅ Base Kraken2 configurée: $KRAKEN_DB"
-                    else
-                        echo "❌ Base Kraken2 invalide (hash.k2d non trouvé)"
-                    fi
-                fi
-
                 if [[ -z "$amrfinder_found" ]]; then
                     echo ""
                     read -p "Chemin vers la base AMRFinder: " custom_amr
@@ -2283,10 +2114,8 @@ interactive_database_setup() {
                 # Continuer sans bases
                 echo ""
                 echo "⚠️  Attention: Certaines analyses échoueront sans les bases de données."
-                echo "   - Kraken2 (classification taxonomique) sera ignoré"
                 echo "   - AMRFinder sera ignoré"
                 echo ""
-                KRAKEN_DB=""
                 AMRFINDER_DB=""
                 ;;
             5)
@@ -2296,11 +2125,6 @@ interactive_database_setup() {
             *)
                 echo "Option invalide. Utilisation de l'option 1 par défaut."
                 # Fallback to option 1 (portable)
-                if [[ -z "$kraken_found" ]]; then
-                    mkdir -p "$DB_DIR/kraken2_db"
-                    download_kraken2_db "$DB_DIR/kraken2_db" "minikraken"
-                    KRAKEN_DB=$(find_kraken2_db)
-                fi
                 if [[ -z "$amrfinder_found" ]]; then
                     mkdir -p "$DB_DIR/amrfinder_db"
                     download_amrfinder_db "$DB_DIR/amrfinder_db"
@@ -2312,7 +2136,6 @@ interactive_database_setup() {
 
     echo ""
     echo "Configuration des bases de données:"
-    echo "  KRAKEN_DB: ${KRAKEN_DB:-NON CONFIGURÉ}"
     echo "  AMRFINDER_DB: ${AMRFINDER_DB:-NON CONFIGURÉ}"
     echo "  CARD_DB: ${CARD_DB:-NON CONFIGURÉ}"
     echo "  POINTFINDER_DB: ${POINTFINDER_DB:-NON CONFIGURÉ}"
@@ -2489,13 +2312,16 @@ check_prerequisites() {
 create_env_if_needed() {
     local env_name=$1
     local packages=$2
-    
+
     if conda env list | grep -q "^${env_name} "; then
         log_success "Environnement '$env_name' existe déjà"
     else
         log_info "Création de l'environnement '$env_name'..."
-        conda create -n "$env_name" -c bioconda -c conda-forge $packages -y 2>&1 | tee -a "$LOG_FILE"
-        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        set +e
+        conda create -n "$env_name" --override-channels -c conda-forge -c bioconda $packages -y 2>&1 | tee -a "$LOG_FILE"
+        local conda_exit=${PIPESTATUS[0]}
+        set -e
+        if [[ $conda_exit -eq 0 ]]; then
             log_success "Environnement '$env_name' créé avec succès"
         else
             log_error "Erreur lors de la création de '$env_name'"
@@ -2562,6 +2388,9 @@ log_info "═══════════════════════�
 log_info "ÉTAPE 0 : TÉLÉCHARGEMENT/PRÉPARATION DES DONNÉES"
 log_info "═══════════════════════════════════════════════════════════════════"
 
+# Activer qc_arg pour les outils SRA (prefetch, fasterq-dump)
+conda activate qc_arg 2>/dev/null || log_warn "Environnement qc_arg non trouvé"
+
 mkdir -p "$DATA_DIR"
 
 # Variables pour stocker les chemins des fichiers
@@ -2605,17 +2434,26 @@ case "$INPUT_TYPE" in
             # Utiliser pushd/popd pour la gestion correcte des répertoires
             pushd "$TEMP_DOWNLOAD_DIR" > /dev/null || { log_error "Impossible d'accéder à $TEMP_DOWNLOAD_DIR"; exit 1; }
 
-            prefetch "$SAMPLE_ID" --output-directory . 2>&1 | tee -a "$LOG_FILE"
-            if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
-                log_error "Échec du téléchargement SRA (prefetch) pour $SAMPLE_ID"
-                popd > /dev/null
-                rm -rf "$TEMP_DOWNLOAD_DIR"
-                exit 1
+            # Tentative 1: prefetch HTTPS (défaut)
+            PREFETCH_OK=false
+            log_info "Tentative 1/3 : prefetch (HTTPS)..."
+            prefetch "$SAMPLE_ID" --output-directory . --max-size 50G 2>&1 | tee -a "$LOG_FILE"
+            if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+                PREFETCH_OK=true
+            else
+                # Tentative 2: prefetch avec transport HTTP (contourne les erreurs HTTPS/TLS)
+                log_warn "Échec HTTPS, tentative 2/3 : prefetch (HTTP)..."
+                prefetch "$SAMPLE_ID" --output-directory . --max-size 50G --transport http 2>&1 | tee -a "$LOG_FILE"
+                if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+                    PREFETCH_OK=true
+                else
+                    log_warn "Échec prefetch, tentative 3/3 : fasterq-dump direct (sans prefetch)..."
+                fi
             fi
 
-            # Convertir en FASTQ
+            # Convertir en FASTQ (fasterq-dump peut aussi télécharger directement si prefetch a échoué)
             log_info "Conversion en FASTQ..."
-            fasterq-dump "$SAMPLE_ID" --split-files --outdir . 2>&1 | tee -a "$LOG_FILE"
+            fasterq-dump "$SAMPLE_ID" --split-files --outdir . --threads "${THREADS:-4}" 2>&1 | tee -a "$LOG_FILE"
             if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
                 log_error "Échec de la conversion FASTQ (fasterq-dump) pour $SAMPLE_ID"
                 popd > /dev/null
@@ -2755,7 +2593,7 @@ log_info "═══════════════════════�
 if [[ "$IS_ASSEMBLED_INPUT" == false ]]; then
     # Module 01 : QC et Nettoyage (seulement si reads)
     create_env_if_needed "qc_arg" \
-        "fastqc=0.12.1 fastp=0.23.4 kraken2=2.1.3 multiqc=1.19"
+        "fastqc=0.12.1 fastp=0.23.4 multiqc=1.19"
 
     # Module 02 : Assemblage (seulement si reads)
     create_env_if_needed "assembly_arg" \
@@ -2773,8 +2611,12 @@ create_env_if_needed "annotation_arg" \
 # Module 04 : Détection ARG (toujours requis)
 # kma : détection ARG haute sensibilité sur reads bruts
 # blast : recherche de séquences ARG dans les reads
+# Note: abricate est dans un env séparé (conflit de dépendances avec amrfinderplus)
 create_env_if_needed "arg_detection" \
-    "ncbi-amrfinderplus=4.2 abricate=1.0.1 kma blast"
+    "ncbi-amrfinderplus kma blast"
+
+create_env_if_needed "abricate_env" \
+    "abricate"
 
 # Module 06 : Analyse et Interprétation (toujours requis)
 create_env_if_needed "analysis_arg" \
@@ -2842,7 +2684,6 @@ if [[ "$IS_SINGLE_END" == true ]]; then
         --unqualified_percent_limit 40 \
         --length_required 30 \
         --dedup \
-        --dup_calc_accuracy 4 \
         --cut_front \
         --cut_tail \
         --cut_window_size 4 \
@@ -2866,7 +2707,6 @@ else
         --length_required 30 \
         --detect_adapter_for_pe \
         --dedup \
-        --dup_calc_accuracy 4 \
         --correction \
         --cut_front \
         --cut_tail \
@@ -2893,43 +2733,10 @@ fi
 
 open_file_safe "$RESULTS_DIR/01_qc/fastp/${SAMPLE_ID}_fastp.html" "Fastp QC Report"
 
-#------- 1.3 Classification taxonomique avec Kraken2 -------
-log_info "1.3 Classification taxonomique avec Kraken2..."
-
-# Vérifier la base de données
-if [[ -z "$KRAKEN_DB" ]]; then
-    log_warn "Kraken2 IGNORÉ (base de données non configurée)"
-elif [[ ! -d "$KRAKEN_DB" ]]; then
-    log_warn "Base Kraken2 non trouvée: $KRAKEN_DB"
-    log_info "Exécutez le pipeline avec l'option de téléchargement des bases de données."
-else
-    if [[ "$IS_SINGLE_END" == true ]]; then
-        kraken2 \
-            --db "$KRAKEN_DB" \
-            "$READ1" \
-            --output "$RESULTS_DIR"/01_qc/kraken2/"${SAMPLE_ID}"_kraken2.out \
-            --report "$RESULTS_DIR"/01_qc/kraken2/"${SAMPLE_ID}"_kraken2.report \
-            --threads "$THREADS" \
-            --use-names 2>&1 | tee -a "$LOG_FILE"
-    else
-        kraken2 \
-            --db "$KRAKEN_DB" \
-            --paired "$READ1" "$READ2" \
-            --output "$RESULTS_DIR"/01_qc/kraken2/"${SAMPLE_ID}"_kraken2.out \
-            --report "$RESULTS_DIR"/01_qc/kraken2/"${SAMPLE_ID}"_kraken2.report \
-            --threads "$THREADS" \
-            --use-names 2>&1 | tee -a "$LOG_FILE"
-    fi
-
-    log_info "Top 10 espèces détectées:"
-    head -20 "$RESULTS_DIR"/01_qc/kraken2/"${SAMPLE_ID}"_kraken2.report 2>&1 | tee -a "$LOG_FILE"
-
-    # Extraction de l'espèce pour Prokka (si mode auto)
-    if [[ "$PROKKA_MODE" == "auto" ]]; then
-        extract_species_from_kraken2 "$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.report" || true
-    fi
-
-    log_success "Kraken2 terminé"
+#------- 1.3 Classification taxonomique via NCBI API -------
+if [[ "$PROKKA_MODE" == "auto" ]]; then
+    log_info "1.3 Détection de l'espèce via l'API NCBI..."
+    fetch_species_from_ncbi "$SAMPLE_ID" "$INPUT_TYPE" || true
 fi
 
 #------- 1.4 FastQC sur reads nettoyés -------
@@ -2957,7 +2764,6 @@ multiqc \
     "$RESULTS_DIR"/01_qc/fastqc_raw \
     "$RESULTS_DIR"/01_qc/fastqc_clean \
     "$RESULTS_DIR"/01_qc/fastp \
-    "$RESULTS_DIR"/01_qc/kraken2 \
     --outdir "$RESULTS_DIR"/01_qc/multiqc \
     --filename "${SAMPLE_ID}"_multiqc_report \
     --title "QC Report - $SAMPLE_ID" \
@@ -2987,43 +2793,11 @@ if [[ "$IS_ASSEMBLED_INPUT" == true ]]; then
     cp "$ASSEMBLY_FASTA" "$RESULTS_DIR/02_assembly/filtered/${SAMPLE_ID}_filtered.fasta"
     log_success "FASTA assemblé prêt pour l'annotation"
     
-    #------- Classification taxonomique avec Kraken2 sur FASTA assemblé -------
-    log_info "Classification taxonomique avec Kraken2 sur le génome assemblé..."
-
-    # Activer l'environnement conda pour Kraken2
-    conda activate qc_arg
-
-    # Vérifier la base de données Kraken2
-    if [[ -z "$KRAKEN_DB" ]]; then
-        log_warn "Kraken2 IGNORÉ (base de données non configurée)"
-    elif [[ ! -d "$KRAKEN_DB" ]]; then
-        log_warn "Base Kraken2 non trouvée: $KRAKEN_DB"
-        log_info "Exécutez le pipeline avec l'option de téléchargement des bases de données."
-    else
-        # Créer le répertoire kraken2 s'il n'existe pas
-        mkdir -p "$RESULTS_DIR/01_qc/kraken2"
-        
-        # Exécuter Kraken2 sur le fichier FASTA assemblé
-        kraken2 \
-            --db "$KRAKEN_DB" \
-            "$RESULTS_DIR/02_assembly/filtered/${SAMPLE_ID}_filtered.fasta" \
-            --output "$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.out" \
-            --report "$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.report" \
-            --threads "$THREADS" \
-            --use-names 2>&1 | tee -a "$LOG_FILE"
-        
-        log_info "Top 10 espèces détectées dans le génome assemblé:"
-        head -20 "$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.report" 2>&1 | tee -a "$LOG_FILE"
-
-        # Extraction de l'espèce pour Prokka (si mode auto)
-        if [[ "$PROKKA_MODE" == "auto" ]]; then
-            extract_species_from_kraken2 "$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.report" || true
-        fi
-
-        log_success "Classification Kraken2 terminée"
+    #------- Classification taxonomique via NCBI API -------
+    if [[ "$PROKKA_MODE" == "auto" ]]; then
+        log_info "Détection de l'espèce via l'API NCBI..."
+        fetch_species_from_ncbi "$SAMPLE_ID" "$INPUT_TYPE" || true
     fi
-    
-    conda deactivate
 else
     log_info "═══════════════════════════════════════════════════════════════════"
     log_info "MODULE 2 : ASSEMBLAGE DU GÉNOME"
@@ -3138,7 +2912,7 @@ PROKKA_ARGS="$PROKKA_ARGS --force"
 
 case "$PROKKA_MODE" in
     auto)
-        # Utiliser les valeurs détectées par Kraken2
+        # Utiliser les valeurs détectées par l'API NCBI
         if [[ -n "$PROKKA_GENUS" ]]; then
             log_info "  Genre détecté: $PROKKA_GENUS"
             PROKKA_ARGS="$PROKKA_ARGS --genus $PROKKA_GENUS"
@@ -3147,7 +2921,7 @@ case "$PROKKA_MODE" in
                 PROKKA_ARGS="$PROKKA_ARGS --species $PROKKA_SPECIES"
             fi
         else
-            log_warn "  Aucune espèce détectée par Kraken2, mode générique utilisé"
+            log_warn "  Aucune espèce détectée via NCBI, mode générique utilisé"
         fi
         ;;
     generic)
@@ -3208,8 +2982,11 @@ MLST_SCHEME=""
 MLST_ST=""
 MLST_ALLELES=""
 
-# Activer l'environnement assembly_arg où mlst est installé
-conda activate assembly_arg
+# Activer l'environnement mlst_env (env séparé pour éviter conflits perl)
+conda activate mlst_env 2>/dev/null || {
+    log_warn "Environnement mlst_env non trouvé, tentative avec assembly_arg..."
+    conda activate assembly_arg 2>/dev/null || true
+}
 
 # Configurer PERL5LIB pour mlst (nécessaire si installé manuellement)
 # Initialiser PERL5LIB si non défini pour éviter unbound variable
@@ -3423,11 +3200,12 @@ else
     log_info "  Reads échantillonnés: $READS_COUNT"
 
     # BLAST contre les séquences ARG connues (utiliser la base abricate)
-    # Récupérer le chemin des bases abricate (même méthode que setup_kma_database)
-    ABRICATE_DB_PATH=$(abricate --help 2>&1 | grep -oP '\-\-datadir.*\[\K[^\]]+' | head -1)
+    # Récupérer le chemin des bases abricate (abricate est dans abricate_env)
+    ABRICATE_DB_PATH=$(conda run -n abricate_env abricate --help 2>&1 | grep -oP '\-\-datadir.*\[\K[^\]]+' | head -1)
     if [[ -z "$ABRICATE_DB_PATH" ]] || [[ ! -d "$ABRICATE_DB_PATH" ]]; then
         # Fallback sur chemins portables
-        for path in "$HOME/abricate/db" "${CONDA_PREFIX:-}/share/abricate/db" "/usr/local/share/abricate/db"; do
+        local abricate_prefix=$(conda run -n abricate_env bash -c 'echo $CONDA_PREFIX' 2>/dev/null)
+        for path in "${abricate_prefix:-}/share/abricate/db" "$HOME/abricate/db" "${CONDA_PREFIX:-}/share/abricate/db" "/usr/local/share/abricate/db"; do
             if [[ -d "$path" ]]; then
                 ABRICATE_DB_PATH="$path"
                 break
@@ -3526,7 +3304,7 @@ if [[ -n "$AMRFINDER_DB" ]]; then
         log_warn "  Pour installer/mettre à jour: amrfinder --force_update"
     fi
 
-    # Détecter l'organisme à partir de Kraken2 pour les détections spécifiques
+    # Détecter l'organisme à partir de l'API NCBI pour les détections spécifiques
     # Organismes supportés par AMRFinder: Escherichia, Salmonella, Klebsiella, Staphylococcus_aureus, etc.
     AMRFINDER_ORGANISM=""
     if [[ -n "$DETECTED_SPECIES" ]]; then
@@ -3581,6 +3359,7 @@ if [[ -n "$AMRFINDER_DB" ]]; then
     log_info "  Exécution d'AMRFinder avec --plus (AMR + virulence + stress)..."
     amrfinder \
         --nucleotide "$RESULTS_DIR"/03_annotation/prokka/"${SAMPLE_ID}".fna \
+        --database "$AMRFINDER_DB" \
         --output "$RESULTS_DIR"/04_arg_detection/amrfinderplus/"${SAMPLE_ID}"_amrfinderplus.tsv \
         --threads "$THREADS" \
         $AMRFINDER_OPTS 2>&1 | tee -a "$LOG_FILE"
@@ -3601,6 +3380,11 @@ else
 fi
 
 #------- 4.2 ABRicate ResFinder -------
+# ABRicate est dans un environnement séparé (conflit de dépendances avec AMRFinderPlus)
+conda activate abricate_env 2>/dev/null || {
+    log_warn "Environnement abricate_env non trouvé, tentative avec arg_detection..."
+}
+
 log_info "4.2 ABRicate ResFinder..."
 
 abricate \
@@ -3657,6 +3441,9 @@ if [[ -f "$RESULTS_DIR/04_arg_detection/vfdb/${SAMPLE_ID}_vfdb.tsv" ]]; then
 else
     log_success "VFDB terminé"
 fi
+
+# Revenir à l'environnement arg_detection après les appels abricate
+conda activate arg_detection 2>/dev/null || true
 
 #------- 4.7 RGI (Resistance Gene Identifier) avec CARD -------
 log_info "4.7 RGI/CARD (détection avancée avec modèles homologue/variant/overexpression)..."
@@ -3725,9 +3512,9 @@ mkdir -p "$RESULTS_DIR"/04_arg_detection/pointfinder
 # Déterminer l'espèce pour PointFinder
 POINTFINDER_SPECIES=""
 # Utiliser ${VAR:-} pour éviter unbound variable avec set -u
-if [[ -n "${KRAKEN_SPECIES:-}" ]]; then
-    # Mapper l'espèce Kraken vers les espèces PointFinder supportées
-    case "$KRAKEN_SPECIES" in
+if [[ -n "${DETECTED_SPECIES:-}" ]]; then
+    # Mapper l'espèce détectée vers les espèces PointFinder supportées
+    case "$DETECTED_SPECIES" in
         *"Escherichia coli"*|*"E. coli"*)
             POINTFINDER_SPECIES="escherichia_coli"
             ;;
@@ -3756,7 +3543,7 @@ if [[ -n "${KRAKEN_SPECIES:-}" ]]; then
             POINTFINDER_SPECIES="neisseria_gonorrhoeae"
             ;;
         *)
-            log_info "  Espèce '$KRAKEN_SPECIES' non supportée par PointFinder"
+            log_info "  Espèce '$DETECTED_SPECIES' non supportée par PointFinder"
             ;;
     esac
 fi
@@ -3953,7 +3740,7 @@ METADATA_SCRIPT="$PYTHON_DIR/generate_metadata.py"
 if [[ -f "$METADATA_SCRIPT" ]]; then
     # Passer l'espèce détectée si disponible
     if [[ -n "$DETECTED_SPECIES" ]]; then
-        export KRAKEN_DETECTED_SPECIES="$DETECTED_SPECIES"
+        export NCBI_DETECTED_SPECIES="$DETECTED_SPECIES"
     fi
     
     python3 "$METADATA_SCRIPT" "$RESULTS_DIR" "$SAMPLE_ID" "$INPUT_TYPE" "$INPUT_ARG" "$THREADS" 2>&1 | tee -a "$LOG_FILE"
@@ -3990,7 +3777,7 @@ log_info "6.2 Génération des rapports..."
         echo "1. CONTRÔLE QUALITÉ"
         echo "   - FastQC: Complété"
         echo "   - Fastp: Complété"
-        echo "   - Kraken2: Complété (si disponible)"
+        echo "   - NCBI API: Espèce détectée (si disponible)"
         echo ""
         echo "2. ASSEMBLAGE"
         echo "   - SPAdes: Complété (mode isolate)"
@@ -4045,22 +3832,19 @@ log_info "6.2 Génération du rapport ARG professionnel..."
 
 ARG_REPORT_SCRIPT="$PYTHON_DIR/generate_arg_report.py"
 
-# Utiliser DETECTED_SPECIES déjà extraite par extract_species_from_kraken2()
+# Utiliser DETECTED_SPECIES déjà extraite par fetch_species_from_ncbi()
 # Si elle n'a pas été définie, essayer de l'extraire maintenant
 if [[ -z "$DETECTED_SPECIES" ]]; then
-    KRAKEN_REPORT="$RESULTS_DIR/01_qc/kraken2/${SAMPLE_ID}_kraken2.report"
-    if [[ -f "$KRAKEN_REPORT" ]]; then
-        extract_species_from_kraken2 "$KRAKEN_REPORT" || true
-    fi
+    fetch_species_from_ncbi "$SAMPLE_ID" "$INPUT_TYPE" || true
 fi
 
 if [[ -f "$ARG_REPORT_SCRIPT" ]]; then
     # Passer l'espèce détectée au script Python via variable d'environnement
     if [[ -n "$DETECTED_SPECIES" ]]; then
-        export KRAKEN_DETECTED_SPECIES="$DETECTED_SPECIES"
+        export NCBI_DETECTED_SPECIES="$DETECTED_SPECIES"
         log_info "Espèce passée au script de rapport: $DETECTED_SPECIES"
     else
-        log_info "Aucune espèce détectée par Kraken2 (ou rapport non disponible)"
+        log_info "Aucune espèce détectée via NCBI"
     fi
 
     # Passer les résultats MLST au script Python

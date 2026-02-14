@@ -808,7 +808,7 @@ def generate_html_report(amr_genes, sample_id, output_file, detected_species=Non
             {f'''
             <div class="metadata" style="background: #e8f5e9; border-top: 2px solid #4caf50;">
                 <div class="meta-item" style="grid-column: 1 / -1; text-align: center;">
-                    <span class="meta-label" style="font-size: 1em; color: #2e7d32;">🦠 Espèce bactérienne détectée (Kraken2)</span>
+                    <span class="meta-label" style="font-size: 1em; color: #2e7d32;">🦠 Espèce bactérienne détectée (NCBI)</span>
                     <span class="meta-value" style="font-size: 1.3em; color: #1b5e20; font-weight: bold; margin-top: 5px;">{detected_species}</span>
                 </div>
             </div>
@@ -1229,10 +1229,10 @@ def main():
     stress_count = len([g for g in amr_genes if g.get('element_type', '') == 'STRESS'])
     print(f"📊 Total: {len(amr_genes)} gènes ({amr_count} AMR, {vir_count} virulence, {stress_count} stress)")
 
-    # Récupérer l'espèce détectée par Kraken2 depuis la variable d'environnement
-    detected_species = os.environ.get('KRAKEN_DETECTED_SPECIES', None)
+    # Récupérer l'espèce détectée par NCBI depuis la variable d'environnement
+    detected_species = os.environ.get('NCBI_DETECTED_SPECIES', None)
     if detected_species:
-        print(f"🦠 Espèce détectée par Kraken2: {detected_species}")
+        print(f"🦠 Espèce détectée via NCBI: {detected_species}")
 
     # Récupérer les résultats MLST depuis les variables d'environnement
     mlst_data = None

@@ -1,11 +1,11 @@
 #!/bin/bash
-# Serveur HTTP simple pour les maquettes
+# Serveur HTTP simple pour le frontend
 # Port 8080 pour éviter conflit avec backend (8000)
 
 # Se placer dans le répertoire du script
 cd "$(dirname "$0")"
 
-echo "🌐 Démarrage serveur maquettes..."
+echo "🌐 Démarrage serveur frontend..."
 echo "📍 URL: http://localhost:8080"
 echo ""
 echo "Pages disponibles:"

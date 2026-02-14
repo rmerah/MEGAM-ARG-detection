@@ -163,7 +163,6 @@ echo "1" | ./MANUAL_MEGA_MONOLITHIC_PIPELINE_v3.2.sh SRR9999999
 
 ### Résultat APRÈS la correction
 ```
-✅ Base Kraken2 trouvée: /path/to/databases/kraken2_db
 ⚠️  Base AMRFinder NON TROUVÉE
 ⚠️  Base CARD (RGI) NON TROUVÉE
 ✅ Base PointFinder trouvée: /path/to/project/pipeline/databases/pointfinder_db

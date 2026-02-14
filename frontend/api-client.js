@@ -16,10 +16,7 @@
 // Auto-détection de l'URL de l'API
 const API_BASE_URL = (() => {
     const port = window.location.port;
-    // Si pas de port explicite (80/443), on est derrière un reverse proxy
-    if (!port || port === '80' || port === '443') {
-        return '';
-    }
+    if (!port || port === '80' || port === '443') return '';
     // Mode développement : backend sur port frontend - 80
     const backendPort = parseInt(port, 10) - 80;
     return `http://${window.location.hostname}:${backendPort}`;
@@ -31,7 +28,7 @@ const API_BASE_URL = (() => {
 async function checkBackendConnection() {
     try {
         const controller = new AbortController();
-        setTimeout(() => controller.abort(), 3000);
+        setTimeout(() => controller.abort(), 30000);
         const response = await fetch(`${API_BASE_URL}/api/databases`, {
             signal: controller.signal,
             headers: { 'Cache-Control': 'no-cache' }

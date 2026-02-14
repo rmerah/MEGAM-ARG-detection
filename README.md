@@ -1,30 +1,21 @@
 <p align="center">
-  <img src="maquettes/logo.png" alt="MEGAM ARG Detection" width="120">
+  <img src="frontend/logo.png" alt="MEGAM ARG Detection" width="120">
 </p>
 
 <h1 align="center">MEGAM ARG Detection WEB</h1>
 
 <p align="center">
   <strong>Antimicrobial Resistance Gene Detection Pipeline</strong><br>
-  Web interface for ARG detection using AMRFinderPlus, ResFinder, CARD, Prokka, SPAdes/MEGAHIT &amp; Kraken2
+  Web interface for ARG detection using AMRFinderPlus, ResFinder, CARD, Prokka, SPAdes/MEGAHIT
 </p>
 
 <p align="center">
-  <a href="#-installation-guide-video">Video</a> &bull;
   <a href="#-français">Français</a> &bull;
   <a href="#-english">English</a>
 </p>
 
----
-
-## 🎬 Installation Guide Video
-
 <p align="center">
-  <a href="https://github.com/rmerah/MEGAM-ARG-detection/releases/download/v3.2/install-guide.mp4">
-    <img src="video/video-thumbnail.jpg" alt="Watch the installation guide video" width="600">
-  </a>
-  <br>
-  <em>Click to watch the installation guide video</em>
+  <img src="video/out/demo-walkthrough.gif" alt="MEGAM ARG Detection Demo" width="700">
 </p>
 
 ---
@@ -40,7 +31,6 @@ MEGAM ARG Detection est une interface web moderne permettant de lancer et monito
 - **CARD** (via Abricate) - Comprehensive Antibiotic Resistance Database
 - **Prokka** - Annotation génomique
 - **SPAdes/MEGAHIT** - Assemblage de novo
-- **Kraken2** - Classification taxonomique
 
 ### Fonctionnalités
 
@@ -58,22 +48,19 @@ MEGAM ARG Detection est une interface web moderne permettant de lancer et monito
 
 - Python 3.8+
 - Conda (pour les outils bioinformatiques)
-- Outils : SPAdes, Prokka, AMRFinderPlus, Abricate, Kraken2
+- Outils : SPAdes, Prokka, AMRFinderPlus, Abricate
 
-#### Backend
+#### Installation rapide
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+chmod +x setup.sh
+./setup.sh
 ```
 
 #### Bases de données
 
 | Base | Description | Taille estimée |
 |------|-------------|----------------|
-| Kraken2 | Classification taxonomique | ~8 GB |
 | AMRFinderPlus | Détection ARG (NCBI) | ~200 MB |
 | CARD | Comprehensive Antibiotic Resistance Database | ~1 GB |
 | ResFinder | Base de données de résistance | ~60 MB |
@@ -90,7 +77,7 @@ cd backend && source venv/bin/activate
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # 2. Frontend (port 8080)
-cd maquettes
+cd frontend
 python3 -m http.server 8080
 
 # 3. Ouvrir http://localhost:8080/form_launch_analysis.html
@@ -142,7 +129,6 @@ MEGAM ARG Detection is a modern web interface for launching and monitoring antim
 - **CARD** (via Abricate) - Comprehensive Antibiotic Resistance Database
 - **Prokka** - Genome annotation
 - **SPAdes/MEGAHIT** - De novo assembly
-- **Kraken2** - Taxonomic classification
 
 ### Features
 
@@ -160,22 +146,19 @@ MEGAM ARG Detection is a modern web interface for launching and monitoring antim
 
 - Python 3.8+
 - Conda (for bioinformatics tools)
-- Tools: SPAdes, Prokka, AMRFinderPlus, Abricate, Kraken2
+- Tools: SPAdes, Prokka, AMRFinderPlus, Abricate
 
-#### Backend
+#### Quick Install
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+chmod +x setup.sh
+./setup.sh
 ```
 
 #### Databases
 
 | Database | Description | Estimated size |
 |----------|-------------|----------------|
-| Kraken2 | Taxonomic classification | ~8 GB |
 | AMRFinderPlus | ARG detection (NCBI) | ~200 MB |
 | CARD | Comprehensive Antibiotic Resistance Database | ~1 GB |
 | ResFinder | Resistance gene database | ~60 MB |
@@ -192,7 +175,7 @@ cd backend && source venv/bin/activate
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # 2. Frontend (port 8080)
-cd maquettes
+cd frontend
 python3 -m http.server 8080
 
 # 3. Open http://localhost:8080/form_launch_analysis.html
@@ -245,7 +228,7 @@ MEGAM_ARG_Detection_WEB/
 │   ├── output_parser.py       # TSV/HTML results parser
 │   └── requirements.txt       # Dependencies
 │
-├── maquettes/                  # Frontend HTML/JS/TailwindCSS
+├── frontend/                  # Frontend HTML/JS/TailwindCSS
 │   ├── form_launch_analysis.html
 │   ├── dashboard_monitoring.html
 │   ├── page_results_arg.html
@@ -259,8 +242,12 @@ MEGAM_ARG_Detection_WEB/
 │   ├── outputs/               # Analysis results
 │   └── databases/             # ARG databases
 │
-└── video/                      # Installation guide video
-    └── install-guide.mp4
+├── video/                      # Demo video (Remotion)
+│   ├── src/                   # Video components
+│   ├── public/screenshots/    # UI screenshots
+│   └── out/                   # Rendered assets (GIF, MP4)
+│
+└── setup.sh                    # Automated install script
 ```
 
 ## Tech Stack
@@ -270,6 +257,7 @@ MEGAM_ARG_Detection_WEB/
 | **Backend** | FastAPI, SQLite (aiosqlite), Pydantic |
 | **Frontend** | HTML5, Vanilla JS, TailwindCSS (CDN), Chart.js |
 | **Pipeline** | Bash, Conda (bioinformatics tools) |
+| **Video** | Remotion (React), TypeScript |
 | **Deployment** | Uvicorn, Python HTTP server |
 
 ---

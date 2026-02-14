@@ -40,7 +40,7 @@ Script bash monolithique orchestrant toute l'analyse ARG (Antibiotic Resistance 
 | Module | Nom | Description | Outils |
 |--------|-----|-------------|--------|
 | **00** | Download | Téléchargement données | sra-tools, wget, datasets |
-| **01** | QC | Contrôle qualité | FastQC, Fastp, Kraken2, MultiQC |
+| **01** | QC | Contrôle qualité | FastQC, Fastp, MultiQC |
 | **02** | Assembly | Assemblage génome | SPAdes, seqkit, QUAST |
 | **03** | Annotation | Annotation gènes | Prokka, MLST |
 | **04** | ARG Detection | Détection gènes résistance | AMRFinderPlus, ABRicate, RGI |
@@ -54,7 +54,7 @@ Script bash monolithique orchestrant toute l'analyse ARG (Antibiotic Resistance 
 
 #### Variables d'environnement exportées
 ```bash
-KRAKEN_DETECTED_SPECIES  # Espèce détectée par Kraken2
+NCBI_DETECTED_SPECIES    # Espèce détectée via l'API NCBI
 MLST_SCHEME              # Schéma MLST
 MLST_ST                  # Sequence Type
 MLST_ALLELES             # Profil allélique
@@ -171,7 +171,7 @@ python3 collect_features.py \
 
 #### Variables d'environnement utilisées
 ```bash
-KRAKEN_DETECTED_SPECIES  # Affichée dans le header
+NCBI_DETECTED_SPECIES    # Affichée dans le header
 MLST_SCHEME, MLST_ST, MLST_ALLELES  # Affichés si disponibles
 ```
 
@@ -220,7 +220,6 @@ MLST_SCHEME, MLST_ST, MLST_ALLELES  # Affichés si disponibles
 {
   "fastqc": "0.12.1",
   "fastp": "0.23.4",
-  "kraken2": "2.1.3",
   "spades": "3.15.5",
   "prokka": "1.14.6",
   "amrfinderplus": "4.2",
@@ -366,7 +365,7 @@ Pipeline Bash
     ↓
 [00_download] → data/
     ↓
-[01_qc] → 01_qc/fastqc_raw, fastp, kraken2
+[01_qc] → 01_qc/fastqc_raw, fastp
     ↓
 [02_assembly] → 02_assembly/spades, quast
     ↓
@@ -442,7 +441,7 @@ Sorties finales:
    - Messages INFO/WARNING/ERROR
    - Statut des modules
 
-### Intégration avec maquettes
+### Intégration avec frontend
 
 **dashboard_monitoring.html** :
 - Remplacer mock logs par vraie lecture `tail -f LOG_FILE`
@@ -466,11 +465,11 @@ Sorties finales:
 
 ### Pipeline
 - **Bash** : Script orchestration
-- **Conda** : Gestion environnements (5 envs)
+- **Conda** : Gestion environnements (6 envs)
 - **Python 3.11** : Scripts génération rapports
 
 ### Outils bioinformatiques
-- **QC** : FastQC, Fastp, Kraken2, MultiQC
+- **QC** : FastQC, Fastp, MultiQC
 - **Assembly** : SPAdes, seqkit, QUAST
 - **Annotation** : Prokka, MLST
 - **ARG** : AMRFinderPlus, ABRicate (5 DB), RGI/CARD, PointFinder

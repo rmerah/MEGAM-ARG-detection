@@ -327,23 +327,32 @@
       const deleteJob = document.getElementById('delete-job').checked;
 
       try {
-        // Supprimer les fichiers
-        if (deleteOutputs || deleteData) {
+        // Supprimer les données téléchargées si demandé (via endpoint dédié)
+        if (deleteData) {
           const params = new URLSearchParams();
-          params.append('delete_outputs', deleteOutputs);
-          params.append('delete_data', deleteData);
+          params.append('delete_outputs', false);
+          params.append('delete_data', true);
 
-          const response = await fetch(`${API_BASE_URL}/api/jobs/${deleteJobId}/files?${params}`, {
+          await fetch(`${API_BASE_URL}/api/jobs/${deleteJobId}/files?${params}`, {
             method: 'DELETE'
           });
-
-          const data = await response.json();
-          console.log('Fichiers supprimés:', data);
         }
 
-        // Supprimer le job de la DB
+        // Supprimer le job (les fichiers outputs sont supprimés automatiquement par le backend)
         if (deleteJob) {
-          await fetch(`${API_BASE_URL}/api/jobs/${deleteJobId}`, {
+          const params = new URLSearchParams();
+          params.append('delete_files', deleteOutputs);
+
+          await fetch(`${API_BASE_URL}/api/jobs/${deleteJobId}?${params}`, {
+            method: 'DELETE'
+          });
+        } else if (deleteOutputs) {
+          // Supprimer uniquement les outputs sans supprimer le job de la DB
+          const params = new URLSearchParams();
+          params.append('delete_outputs', true);
+          params.append('delete_data', false);
+
+          await fetch(`${API_BASE_URL}/api/jobs/${deleteJobId}/files?${params}`, {
             method: 'DELETE'
           });
         }
@@ -360,12 +369,12 @@
     }
 
     async function deleteAllJobs() {
-      if (!confirm('⚠️ ATTENTION ⚠️\n\nVoulez-vous vraiment supprimer TOUS les jobs de l\'historique ?\n\nCette action est irréversible.')) {
+      if (!confirm('⚠️ ATTENTION ⚠️\n\nVoulez-vous vraiment supprimer TOUS les jobs et leurs fichiers associés ?\n\nCette action est irréversible.')) {
         return;
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/jobs`, {
+        const response = await fetch(`${API_BASE_URL}/api/jobs?delete_files=true`, {
           method: 'DELETE'
         });
         const data = await response.json();

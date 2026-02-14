@@ -181,7 +181,7 @@ Le pipeline détecte automatiquement le type d'input:
 
 ## Modes Prokka
 
-- **auto** (recommandé): Détection automatique de l'espèce via Kraken2
+- **auto** (recommandé): Détection automatique de l'espèce via l'API NCBI
 - **generic**: Mode universel pour toutes bactéries
 - **ecoli**: Optimisé pour E. coli K-12
 - **custom**: Spécification manuelle du genre et de l'espèce

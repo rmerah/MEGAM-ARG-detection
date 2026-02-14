@@ -499,13 +499,9 @@ async def get_job_results(job_id: str):
         # Parser stats assemblage (si disponible)
         assembly_stats = parser.parse_assembly_stats()
 
-        # Parser informations taxonomiques
-        taxonomy_info = parser.parse_taxonomy()
+        # Parser informations taxonomiques (via NCBI API)
         ncbi_info = parser.fetch_ncbi_organism(job['sample_id'], job['input_type'])
-        if taxonomy_info and ncbi_info:
-            taxonomy_info['ncbi'] = ncbi_info
-        elif ncbi_info:
-            taxonomy_info = {'ncbi': ncbi_info, 'source': 'NCBI'}
+        taxonomy_info = {'ncbi': ncbi_info, 'source': 'NCBI'} if ncbi_info else None
         mlst_info = parser.parse_mlst()
 
         # Trouver rapport HTML
@@ -594,12 +590,13 @@ async def list_jobs(
 
 
 @app.delete("/api/jobs/{job_id}")
-async def delete_job(job_id: str):
+async def delete_job(job_id: str, delete_files: bool = True):
     """
-    Supprime un job spécifique
+    Supprime un job spécifique et ses fichiers associés
 
     Args:
         job_id: ID du job à supprimer
+        delete_files: Supprimer aussi les fichiers sur disque (défaut: True)
 
     Returns:
         Message de confirmation
@@ -616,9 +613,21 @@ async def delete_job(job_id: str):
                 detail=f"Job {job_id} non trouvé"
             )
 
-        # Supprimer le job
+        # Supprimer les fichiers sur disque
+        files_deleted = False
+        if delete_files and job.get('output_dir'):
+            output_path = Path(job['output_dir'])
+            if output_path.exists():
+                try:
+                    shutil.rmtree(output_path)
+                    files_deleted = True
+                    logger.info(f"🗑️ Fichiers supprimés: {output_path}")
+                except OSError as e:
+                    logger.error(f"Erreur suppression fichiers {output_path}: {e}")
+
+        # Supprimer le job de la DB
         await db.delete_job(job_id)
-        logger.info(f"🗑️ Job {job_id} supprimé")
+        logger.info(f"🗑️ Job {job_id} supprimé (fichiers: {'oui' if files_deleted else 'non'})")
 
         return {"message": f"Job {job_id} supprimé avec succès"}
 
@@ -633,18 +642,39 @@ async def delete_job(job_id: str):
 
 
 @app.delete("/api/jobs")
-async def delete_all_jobs():
+async def delete_all_jobs(delete_files: bool = True):
     """
-    Supprime TOUS les jobs (pour nettoyage)
+    Supprime TOUS les jobs et leurs fichiers associés
+
+    Args:
+        delete_files: Supprimer aussi les fichiers sur disque (défaut: True)
 
     Returns:
         Message de confirmation avec nombre de jobs supprimés
     """
     try:
-        count = await db.delete_all_jobs()
-        logger.warning(f"🗑️ Tous les jobs supprimés ({count} jobs)")
+        files_deleted = 0
 
-        return {"message": f"{count} jobs supprimés avec succès"}
+        # Supprimer les fichiers de chaque job avant de vider la DB
+        if delete_files:
+            jobs = await db.get_jobs(limit=10000)
+            for job in jobs:
+                if job.get('output_dir'):
+                    output_path = Path(job['output_dir'])
+                    if output_path.exists():
+                        try:
+                            shutil.rmtree(output_path)
+                            files_deleted += 1
+                            logger.info(f"🗑️ Fichiers supprimés: {output_path}")
+                        except OSError as e:
+                            logger.error(f"Erreur suppression {output_path}: {e}")
+
+        count = await db.delete_all_jobs()
+        logger.warning(f"🗑️ Tous les jobs supprimés ({count} jobs, {files_deleted} dossiers)")
+
+        return {
+            "message": f"{count} jobs supprimés avec succès ({files_deleted} dossiers nettoyés)"
+        }
 
     except Exception as e:
         logger.error(f"❌ Erreur suppression tous jobs: {e}")
@@ -1008,14 +1038,6 @@ def _conda_wrap(cmd: str, env: str = None) -> str:
 
 # Configuration des bases de données
 DATABASES_CONFIG = {
-    "kraken2": {
-        "name": "Kraken2",
-        "description": "Classification taxonomique",
-        "path": "kraken2_db",
-        "check_files": ["hash.k2d"],
-        "size_estimate": "8 GB (minikraken) / 70 GB (standard)",
-        "update_cmd": "download_kraken2_db"
-    },
     "amrfinder": {
         "name": "AMRFinderPlus",
         "description": "Détection ARG (NCBI)",
@@ -1101,14 +1123,6 @@ def _run_db_download(db_key: str):
         elif db_key == "mlst":
             cmd = _conda_wrap("mlst --update 2>&1 || echo 'MLST update done'", CONDA_ARG_ENV)
             _download_with_command(db_key, f"bash -c '{cmd}'", timeout=1800)
-
-        elif db_key == "kraken2":
-            # Supprimer d'éventuelles archives corrompues
-            corrupted = db_path / "kraken2_db.tar.gz"
-            if corrupted.exists():
-                corrupted.unlink()
-            _download_with_wget(db_key, "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_08gb_20231009.tar.gz",
-                                db_path, "kraken2_db.tar.gz", extract_cmd="tar -xzf")
 
         elif db_key == "kma":
             _download_kma_database(db_key, db_path)
