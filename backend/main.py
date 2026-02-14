@@ -1301,7 +1301,8 @@ def _download_kma_database(db_key: str, db_path: Path):
         _update_download_progress(db_key, progress=progress_pct,
                                   message=f"Indexation KMA: {db_name}... ({i+1}/{len(databases_to_index)})")
 
-        kma_cmd = f"bash -c '{_conda_wrap(f\"kma index -i {seq_file} -o {db_path / db_name}\", CONDA_ARG_ENV)}'"
+        kma_raw = "kma index -i {} -o {}".format(seq_file, db_path / db_name)
+        kma_cmd = "bash -c '{}'".format(_conda_wrap(kma_raw, CONDA_ARG_ENV))
         result = subprocess.run(
             kma_cmd, shell=True, capture_output=True, text=True, timeout=300
         )
