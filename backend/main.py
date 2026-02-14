@@ -1250,32 +1250,41 @@ def _download_kma_database(db_key: str, db_path: Path):
                               message="Recherche des bases abricate...", speed="")
 
     # Trouver le répertoire des bases abricate via conda
+    # Abricate peut être dans abricate_env (recommandé) ou arg_detection
     abricate_db_dir = None
-    try:
-        result = subprocess.run(
-            f"bash -c '{_conda_wrap('abricate --datadir', CONDA_ARG_ENV)}'",
-            shell=True, capture_output=True, text=True, timeout=30
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            candidate = Path(result.stdout.strip())
-            if candidate.is_dir():
-                abricate_db_dir = candidate
-    except Exception as e:
-        logger.warning(f"[DB Download] kma: abricate --datadir failed: {e}")
+    for env_name in ["abricate_env", CONDA_ARG_ENV]:
+        try:
+            result = subprocess.run(
+                f"bash -c '{_conda_wrap('abricate --datadir', env_name)}'",
+                shell=True, capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                candidate = Path(result.stdout.strip())
+                if candidate.is_dir():
+                    abricate_db_dir = candidate
+                    logger.info(f"[DB Download] kma: abricate trouvé dans env '{env_name}'")
+                    break
+        except Exception as e:
+            logger.warning(f"[DB Download] kma: abricate --datadir failed ({env_name}): {e}")
 
-    # Fallback: chemins connus
+    # Fallback: chemins connus dans les deux envs
     if not abricate_db_dir:
-        for p in [
-            Path(CONDA_BASE) / "envs" / CONDA_ARG_ENV / "db" if CONDA_BASE else None,
-            Path.home() / "miniconda3" / "envs" / CONDA_ARG_ENV / "db",
-            Path.home() / "anaconda3" / "envs" / CONDA_ARG_ENV / "db",
-        ]:
-            if p and p.is_dir():
-                abricate_db_dir = p
+        for env_name in ["abricate_env", CONDA_ARG_ENV]:
+            for base in [
+                Path(CONDA_BASE) / "envs" if CONDA_BASE else None,
+                Path.home() / "miniconda3" / "envs",
+                Path.home() / "anaconda3" / "envs",
+            ]:
+                if base:
+                    p = base / env_name / "db"
+                    if p.is_dir():
+                        abricate_db_dir = p
+                        break
+            if abricate_db_dir:
                 break
 
     if not abricate_db_dir:
-        raise Exception("Bases abricate non trouvées. Installez abricate dans l'env conda 'arg_detection'.")
+        raise Exception("Bases abricate non trouvées. Installez abricate: conda create -n abricate_env -c bioconda abricate")
 
     logger.info(f"[DB Download] kma: bases abricate trouvées: {abricate_db_dir}")
     db_path.mkdir(parents=True, exist_ok=True)
@@ -1292,9 +1301,9 @@ def _download_kma_database(db_key: str, db_path: Path):
         _update_download_progress(db_key, progress=progress_pct,
                                   message=f"Indexation KMA: {db_name}... ({i+1}/{len(databases_to_index)})")
 
+        kma_cmd = f"bash -c '{_conda_wrap(f\"kma index -i {seq_file} -o {db_path / db_name}\", CONDA_ARG_ENV)}'"
         result = subprocess.run(
-            ["kma", "index", "-i", str(seq_file), "-o", str(db_path / db_name)],
-            capture_output=True, text=True, timeout=300
+            kma_cmd, shell=True, capture_output=True, text=True, timeout=300
         )
         if result.returncode != 0:
             logger.warning(f"[DB Download] kma index {db_name} failed: {result.stderr[:200]}")
