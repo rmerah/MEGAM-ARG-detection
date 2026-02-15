@@ -15,7 +15,9 @@
 </p>
 
 <p align="center">
-  <img src="video/out/demo-walkthrough.gif" alt="MEGAM ARG Detection Demo" width="700">
+  <video src="video/out/install-guide.mp4" width="700" controls autoplay muted>
+    Your browser does not support the video tag.
+  </video>
 </p>
 
 ---
