@@ -15,9 +15,11 @@
 </p>
 
 <p align="center">
-  <video src="video/out/install-guide.mp4" width="700" controls autoplay muted>
-    Your browser does not support the video tag.
-  </video>
+  <a href="https://github.com/rmerah/MEGAM-ARG-detection/releases/download/v3.2/install-guide.mp4">
+    <img src="video/out/demo-walkthrough.gif" alt="MEGAM ARG Detection Demo - Click to watch with audio" width="700">
+  </a>
+  <br>
+  <em>Click the image to watch the demo with audio</em>
 </p>
 
 ---
