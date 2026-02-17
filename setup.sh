@@ -112,6 +112,17 @@ check_system() {
     if command -v python3 &>/dev/null; then
         local pyver=$(python3 --version 2>&1 | awk '{print $2}')
         ok "Python $pyver"
+        # Vérifier que python3-venv est installé (souvent manquant sur Ubuntu/Debian)
+        if ! python3 -m venv --help &>/dev/null; then
+            warn "python3-venv non installé (requis pour le backend)"
+            if [[ "$PKG_MANAGER" == "apt" ]]; then
+                missing_pkgs+=("python3-venv")
+            elif [[ "$PKG_MANAGER" == "yum" ]]; then
+                missing_pkgs+=("python3-virtualenv")
+            fi
+        else
+            ok "python3-venv disponible"
+        fi
     else
         warn "Python3 non trouvé"
         missing_pkgs+=("python3" "python3-venv" "python3-pip")
@@ -448,12 +459,26 @@ setup_backend() {
     fi
 
     # Créer le venv Python
-    if [[ -d "$BACKEND_DIR/venv" ]]; then
+    if [[ -d "$BACKEND_DIR/venv" ]] && [[ -f "$BACKEND_DIR/venv/bin/python" ]]; then
         ok "Environnement virtuel existe déjà"
     else
+        # Supprimer un venv cassé s'il existe
+        [[ -d "$BACKEND_DIR/venv" ]] && rm -rf "$BACKEND_DIR/venv"
         info "Création de l'environnement virtuel Python..."
-        python3 -m venv "$BACKEND_DIR/venv"
+        if ! python3 -m venv "$BACKEND_DIR/venv"; then
+            fail "Impossible de créer le venv Python"
+            fail "Installez python3-venv : sudo apt install python3-venv"
+            return 1
+        fi
         ok "Environnement virtuel créé"
+    fi
+
+    # Vérifier que pip existe dans le venv
+    if [[ ! -f "$BACKEND_DIR/venv/bin/pip" ]]; then
+        fail "pip non trouvé dans le venv (python3-venv probablement incomplet)"
+        fail "Installez python3-venv : sudo apt install python3-venv"
+        fail "Puis supprimez backend/venv et relancez ./setup.sh"
+        return 1
     fi
 
     # Installer les dépendances
