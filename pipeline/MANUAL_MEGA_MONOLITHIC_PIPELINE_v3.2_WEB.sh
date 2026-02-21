@@ -691,15 +691,21 @@ except Exception:
             # SRA (SRR/ERR/DRR) : esearch -> esummary
             local search_result
             search_result=$(_ncbi_curl "${entrez_base}/esearch.fcgi?db=sra&term=${sample_id}&retmode=json")
+            log_info "  [DEBUG] esearch result length: ${#search_result}"
             local uid
             uid=$(echo "$search_result" | _extract_uid)
+            log_info "  [DEBUG] extracted UID: [$uid]"
             if [[ -n "$uid" ]]; then
                 local summary
                 summary=$(_ncbi_curl "${entrez_base}/esummary.fcgi?db=sra&id=${uid}&retmode=json")
+                log_info "  [DEBUG] esummary result length: ${#summary}"
                 local parsed
                 parsed=$(echo "$summary" | _extract_organism)
+                log_info "  [DEBUG] parsed organism|taxid: [$parsed]"
                 organism=$(echo "$parsed" | cut -d'|' -f1)
                 taxid=$(echo "$parsed" | cut -d'|' -f2)
+            else
+                log_warn "  [DEBUG] esearch returned no UID - curl response: ${search_result:0:200}"
             fi
             ;;
         genbank)
